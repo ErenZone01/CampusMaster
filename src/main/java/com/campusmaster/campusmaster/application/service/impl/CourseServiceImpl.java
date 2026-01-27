@@ -60,7 +60,6 @@ public class CourseServiceImpl implements CourseService {
 
     @Override
     public List<Course> getCoursesBySemester(Semester semester) {
-        // TODO Auto-generated method stub
         throw new UnsupportedOperationException("Unimplemented method 'getCoursesBySemester'");
     }
 

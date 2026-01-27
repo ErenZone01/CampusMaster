@@ -11,6 +11,7 @@ import com.campusmaster.campusmaster.application.service.AuthService;
 import com.campusmaster.campusmaster.domain.model.user.Role;
 import com.campusmaster.campusmaster.domain.model.user.Student;
 import com.campusmaster.campusmaster.domain.model.user.User;
+import com.campusmaster.campusmaster.domain.repository.StudentRepository;
 import com.campusmaster.campusmaster.domain.repository.UserRepository;
 import com.campusmaster.campusmaster.infrastructure.security.config.JwtService;
 
@@ -21,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
     private final UserRepository userRepository;
+    private final StudentRepository studentRepository;
     private final BCryptPasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     
@@ -29,7 +31,7 @@ public class AuthServiceImpl implements AuthService {
     public UserResponse register(RegisterRequest request) {
          // Logique d'enregistrement de l'utilisateur
 
-        if (userRepository.existsByEmail(request.getEmail())) {
+        if (studentRepository.existsByEmail(request.getEmail()).isPresent()) {
             throw new IllegalArgumentException("Email already in use");
         }
 
@@ -40,11 +42,15 @@ public class AuthServiceImpl implements AuthService {
         student.setPassword(passwordEncoder.encode(request.getPassword()));
         student.setRole(Role.STUDENT);
         student.setEnabled(false);
-        student.setMatricule("N" + Math.random() + "20261");
+        String ine;
+        do {
+            ine = INEGenerator.generate();
+        } while (studentRepository.existsByINE(ine));
+        student.setINE(ine);
 
 
 
-        userRepository.save(student);
+        studentRepository.save(student);
 
         return UserResponse.builder()
                 .email(request.getEmail())
