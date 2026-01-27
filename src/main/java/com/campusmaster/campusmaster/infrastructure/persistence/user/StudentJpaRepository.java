@@ -10,7 +10,7 @@ import com.campusmaster.campusmaster.domain.repository.StudentRepository;
 public interface StudentJpaRepository extends JpaRepository<Student, Long>, StudentRepository {
     Optional<Student> findByINE(String INE);
         boolean existsByINE(String INE);
-        Optional<Student> existsByEmail(String email);
+        Boolean existsByEmail(String email);
         Student save(Student student);
         Optional<Student> findById(Long id);
         void deleteById(Long id);

@@ -1,10 +1,12 @@
 package com.campusmaster.campusmaster.application.dto;
 
 
+import java.sql.Date;
+
+import com.fasterxml.jackson.annotation.JsonFormat;
+
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
-import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -16,22 +18,27 @@ import lombok.Setter;
 @Getter
 @Setter
 @Builder
-public class RegisterRequest {
+public class StudentRequest {
     @Email
-    @NotBlank
-    @NotEmpty
-    @NotNull
     private String email;
     @NotBlank
-    @NotEmpty
-    @NotNull
     private String firstName;
     @NotBlank
-    @NotEmpty
-    @NotNull
     private String lastName;
     @NotBlank
-    @NotEmpty
-    @NotNull
     private String password;
+
+    @JsonFormat(pattern = "yyyy-MM-dd", shape = JsonFormat.Shape.STRING)
+    private Date dateOfBirth;
+
+    @Builder.Default
+    private Boolean validated = false;
+    
+    @NotBlank
+    private String department_code;
+    @NotBlank
+    private String gender;
+
+    private String INE;
+
 }

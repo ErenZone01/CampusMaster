@@ -23,7 +23,7 @@ import com.campusmaster.campusmaster.domain.model.pedagogy.Semester;
 import com.campusmaster.campusmaster.domain.model.user.Teacher;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Module;
 
-import io.swagger.v3.oas.annotations.parameters.RequestBody;
+import org.springframework.web.bind.annotation.RequestBody;
 import jakarta.validation.Valid;
 
 @RestController
@@ -54,11 +54,11 @@ public class AdminController {
         departmentService.createDepartment(request);
     }
 
-    @PreAuthorize("hasRole('ADMIN')")
-    @PostMapping("/create/modules")
-    public void createModule(@RequestBody CreateModuleRequest request) {
-       moduleService.createModule(request);
-    }
+     @PreAuthorize("hasRole('ADMIN')")
+     @PostMapping("/create/modules")
+     public void createModule(@Valid @RequestBody CreateModuleRequest request) {
+         moduleService.createModule(request);
+     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/modules")

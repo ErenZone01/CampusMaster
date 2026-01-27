@@ -43,6 +43,9 @@ public class CourseServiceImpl implements CourseService {
         Module module = moduleRepository.findById(request.getModuleId()).get();
         Teacher teacher = teacherRepository.findById(request.getTeacherId()).get();
 
+        module.getTeachers().add(teacher);
+        
+
         Course course = Course.builder()
                 .title(request.getTitle())
                 .description(request.getDescription())
@@ -50,6 +53,7 @@ public class CourseServiceImpl implements CourseService {
                 .teacher(teacher)
                 .build();
         courseRepository.save(course);
+        moduleRepository.save(module);
         return course;
     }
 

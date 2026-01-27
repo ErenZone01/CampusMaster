@@ -8,4 +8,5 @@ public interface DepartmentRepository {
     boolean existsByCode(String code);
     Department save(Department department);
     Optional<Department> findById(Long id);
+    Optional<Department> findByCode(String code);
 }

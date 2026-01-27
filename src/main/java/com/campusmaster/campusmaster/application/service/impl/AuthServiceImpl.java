@@ -1,16 +1,19 @@
 package com.campusmaster.campusmaster.application.service.impl;
 
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.campusmaster.campusmaster.application.dto.AuthResponse;
 import com.campusmaster.campusmaster.application.dto.LoginRequest;
-import com.campusmaster.campusmaster.application.dto.RegisterRequest;
+import com.campusmaster.campusmaster.application.dto.StudentRequest;
 import com.campusmaster.campusmaster.application.dto.UserResponse;
 import com.campusmaster.campusmaster.application.service.AuthService;
+import com.campusmaster.campusmaster.domain.model.pedagogy.Department;
 import com.campusmaster.campusmaster.domain.model.user.Role;
 import com.campusmaster.campusmaster.domain.model.user.Student;
 import com.campusmaster.campusmaster.domain.model.user.User;
+import com.campusmaster.campusmaster.domain.repository.DepartmentRepository;
 import com.campusmaster.campusmaster.domain.repository.StudentRepository;
 import com.campusmaster.campusmaster.domain.repository.UserRepository;
 import com.campusmaster.campusmaster.infrastructure.security.config.JwtService;
@@ -23,17 +26,21 @@ import lombok.RequiredArgsConstructor;
 public class AuthServiceImpl implements AuthService {
     private final UserRepository userRepository;
     private final StudentRepository studentRepository;
+    private final DepartmentRepository departmentRepository;
     private final BCryptPasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     
 
     @Override
-    public UserResponse register(RegisterRequest request) {
+    public UserResponse register(StudentRequest request) {
          // Logique d'enregistrement de l'utilisateur
 
-        if (studentRepository.existsByEmail(request.getEmail()).isPresent()) {
+        if (studentRepository.existsByEmail(request.getEmail())) {
             throw new IllegalArgumentException("Email already in use");
         }
+
+        Department department = departmentRepository.findByCode(request.getDepartment_code())
+                .orElseThrow(() -> new IllegalArgumentException("Invalid department code"));
 
         Student student = new Student();
         student.setFirstName(request.getFirstName());
@@ -42,6 +49,10 @@ public class AuthServiceImpl implements AuthService {
         student.setPassword(passwordEncoder.encode(request.getPassword()));
         student.setRole(Role.STUDENT);
         student.setEnabled(false);
+        student.setValidated(false);
+        student.setDepartment(department);
+        student.setGender(request.getGender());
+        student.setDateOfBirth(request.getDateOfBirth());
         String ine;
         do {
             ine = INEGenerator.generate();
@@ -66,6 +77,14 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findByEmail(request.getEmail()).orElseThrow(() ->
          new IllegalArgumentException("Invalid email or password")
         );
+
+        if (user.getRole() == Role.STUDENT) {
+            Student student = studentRepository.findByEmail(request.getEmail()).get();
+            if (!student.isValidated()){
+                throw new AccessDeniedException("Profil étudiant non validé");
+            }
+        }
+
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             throw new IllegalArgumentException("Invalid email, role or password");

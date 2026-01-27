@@ -1,5 +1,6 @@
 package com.campusmaster.campusmaster.application.service.impl;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
@@ -35,16 +36,17 @@ public class ModuleServiceImpl implements ModuleService {
             throw new RuntimeException("Module with code " + request.getCode() + " already exists");
         }
 
-        if (departmentRepository.findById(request.getDepartment()) == null) {
-            throw new RuntimeException("Department not found with id " + request.getDepartment());
+        if (departmentRepository.findByCode(request.getDepartment()) == null) {
+            throw new RuntimeException("Department not found with code " + request.getDepartment());
         }
 
-        if (teacherRepository.findAllById(request.getTeachers()).size() != request.getTeachers().size()) {
-            throw new RuntimeException("One or more teachers not found with the given ids");
-        }
+        List<Teacher> teachers = new ArrayList<>();
 
-        Department department = departmentRepository.findById(request.getDepartment()).get();
-        List<Teacher> teachers = teacherRepository.findAllById(request.getTeachers());
+        if (!teacherRepository.findAllById(request.getTeachers()).isEmpty()) {
+            teachers = teacherRepository.findAllById(request.getTeachers());
+        } 
+
+        Department department = departmentRepository.findByCode(request.getDepartment()).get();
 
         Module module = Module.builder()
                 .name(request.getName())
@@ -63,15 +65,15 @@ public class ModuleServiceImpl implements ModuleService {
         Module existingModule = moduleRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Module not found"));
 
-        if (departmentRepository.findById(module.getDepartment()) == null) {
-            throw new RuntimeException("Department not found with id " + module.getDepartment());
+        if (departmentRepository.findByCode(module.getDepartment()) == null) {
+            throw new RuntimeException("Department not found with code " + module.getDepartment());
         }
 
         if (teacherRepository.findAllById(module.getTeachers()).size() != module.getTeachers().size()) {
             throw new RuntimeException("One or more teachers not found with the given ids");
         }
 
-        Department department = departmentRepository.findById(module.getDepartment()).get();
+        Department department = departmentRepository.findByCode(module.getDepartment()).get();
         List<Teacher> teachers = teacherRepository.findAllById(module.getTeachers());
 
         existingModule.setName(module.getName());

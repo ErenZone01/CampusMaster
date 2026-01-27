@@ -4,6 +4,7 @@ import java.util.List;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Semester;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -20,10 +21,10 @@ public class CreateModuleRequest {
     private String name;
     @NotBlank
     private String code;
-    @NotBlank
+    @NotNull
     private Semester semester;
     @NotBlank
-    private Long department;
+    private String department;
 
     private List<Long> teachers;
 }
