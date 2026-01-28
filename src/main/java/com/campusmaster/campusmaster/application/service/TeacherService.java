@@ -1,7 +1,7 @@
 package com.campusmaster.campusmaster.application.service;
 
-import com.campusmaster.campusmaster.domain.model.user.Student;
+import com.campusmaster.campusmaster.application.dto.StudentResponse;
 
 public interface TeacherService {
-    Student validateStudent(Long studentId);
+    StudentResponse validateStudent(Long studentId);
 }

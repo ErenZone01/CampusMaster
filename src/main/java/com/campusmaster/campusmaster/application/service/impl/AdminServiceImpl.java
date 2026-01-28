@@ -7,6 +7,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.campusmaster.campusmaster.application.dto.CreateTeacherRequest;
+import com.campusmaster.campusmaster.application.dto.UserResponse;
 import com.campusmaster.campusmaster.application.service.AdminService;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Department;
 import com.campusmaster.campusmaster.domain.model.user.Role;
@@ -33,9 +34,13 @@ public class AdminServiceImpl implements AdminService {
     
 
     @Override
-    public Teacher createTeacher(CreateTeacherRequest request) {
+    public UserResponse createTeacher(CreateTeacherRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new RuntimeException("Email already used");
+        }
+
+        if (!departmentRepository.existsByCode(request.getDepartment())){
+            throw new RuntimeException("Department not found");
         }
 
         Teacher teacher = new Teacher();
@@ -47,6 +52,23 @@ public class AdminServiceImpl implements AdminService {
         teacher.setEnabled(true);
         teacher.setDepartment(request.getDepartment());
 
-        return teacherRepository.save(teacher);
+        Teacher teacher_save = teacherRepository.save(teacher);
+
+        Department department = departmentRepository.findByCode(request.getDepartment()).get();
+        if (moduleRepository.findByDepartmentId(department.getId()) != null){
+            List<Module> module = moduleRepository.findByDepartmentId(department.getId());
+            module.forEach((e)->{
+                e.getTeachers().add(teacher_save);
+                moduleRepository.save(e);
+            });
+        }
+
+        return  UserResponse.builder()
+                            .email(teacher.getEmail())
+                            .firstName(teacher.getFirstName())
+                            .lastName(teacher.getLastName())
+                            .role(teacher.getRole())
+                            .build();
+
     }
 }

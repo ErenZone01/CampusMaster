@@ -16,11 +16,14 @@ import org.springframework.web.bind.annotation.RestController;
 import com.campusmaster.campusmaster.application.dto.CreateDepartmentRequest;
 import com.campusmaster.campusmaster.application.dto.CreateModuleRequest;
 import com.campusmaster.campusmaster.application.dto.CreateTeacherRequest;
+import com.campusmaster.campusmaster.application.dto.UserResponse;
 import com.campusmaster.campusmaster.application.service.AdminService;
 import com.campusmaster.campusmaster.application.service.DepartmentService;
 import com.campusmaster.campusmaster.application.service.ModuleService;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Semester;
-import com.campusmaster.campusmaster.domain.model.user.Teacher;
+
+import io.swagger.v3.oas.annotations.tags.Tag;
+
 import com.campusmaster.campusmaster.domain.model.pedagogy.Module;
 
 import org.springframework.web.bind.annotation.RequestBody;
@@ -28,6 +31,7 @@ import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/admin")
+@Tag(name = "Admin", description = "Administration académique")
 public class AdminController {
     
     @Autowired
@@ -41,10 +45,10 @@ public class AdminController {
 
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/create/teachers")
-    public ResponseEntity<Teacher> createTeacher(
+    public ResponseEntity<UserResponse> createTeacher(
             @Valid @RequestBody CreateTeacherRequest request) {
 
-        Teacher teacher = adminService.createTeacher(request);
+        UserResponse teacher = adminService.createTeacher(request);
         return new ResponseEntity<>(teacher, HttpStatus.CREATED);
     }
 
