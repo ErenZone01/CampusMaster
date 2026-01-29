@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import com.campusmaster.campusmaster.application.dto.StudentResponse;
 import com.campusmaster.campusmaster.application.service.TeacherService;
 import com.campusmaster.campusmaster.domain.model.user.Student;
+import com.campusmaster.campusmaster.domain.model.user.Teacher;
 import com.campusmaster.campusmaster.domain.repository.StudentRepository;
 
 @Service
@@ -15,10 +16,17 @@ public class TeacherServiceImpl implements TeacherService {
     private StudentRepository studentRepository;
 
     @Override
-    public StudentResponse validateStudent(Long studentId) {
+    public StudentResponse validateStudent(Teacher teacher,Long studentId, Boolean isvalidated) {
         Student student = studentRepository.findById(studentId)
                 .orElseThrow(() -> new IllegalArgumentException("Student not found"));
-        student.setValidated(true);
+
+        if (!teacher.getDepartment().equals(student.getDepartment().getCode())){
+           throw new IllegalArgumentException("The teacher is not in the same department.");
+        }
+
+        student.setValidated(isvalidated);
+
+        
 
         studentRepository.save(student);
 

@@ -13,8 +13,12 @@ public interface CourseJpaRepository extends JpaRepository<Course, Long>, Course
     // Tous les cours d’un module
     List<Course> findByModule(Module module);
 
+
+
     // Tous les cours enseignés par un prof
     List<Course> findByTeacher(Teacher teacher);
+
+
 
     // Sauvegarder un cours
     Course save(Course course);

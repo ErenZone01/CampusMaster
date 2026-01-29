@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -17,14 +18,14 @@ import com.campusmaster.campusmaster.application.dto.CreateDepartmentRequest;
 import com.campusmaster.campusmaster.application.dto.CreateModuleRequest;
 import com.campusmaster.campusmaster.application.dto.CreateTeacherRequest;
 import com.campusmaster.campusmaster.application.dto.UserResponse;
+import com.campusmaster.campusmaster.application.dto.ModuleResponse;
+import com.campusmaster.campusmaster.application.dto.DepartmentResponse;
 import com.campusmaster.campusmaster.application.service.AdminService;
 import com.campusmaster.campusmaster.application.service.DepartmentService;
 import com.campusmaster.campusmaster.application.service.ModuleService;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Semester;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
-
-import com.campusmaster.campusmaster.domain.model.pedagogy.Module;
 
 import org.springframework.web.bind.annotation.RequestBody;
 import jakarta.validation.Valid;
@@ -47,44 +48,48 @@ public class AdminController {
     @PostMapping("/create/teachers")
     public ResponseEntity<UserResponse> createTeacher(
             @Valid @RequestBody CreateTeacherRequest request) {
-
-        UserResponse teacher = adminService.createTeacher(request);
-        return new ResponseEntity<>(teacher, HttpStatus.CREATED);
+        return new ResponseEntity<>(adminService.createTeacher(request), HttpStatus.CREATED);
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/create/departments")
-    public void createDepartment(@Valid @RequestBody CreateDepartmentRequest request) {
-        departmentService.createDepartment(request);
+    public ResponseEntity<DepartmentResponse> createDepartment(@Valid @RequestBody CreateDepartmentRequest request) {
+        return new ResponseEntity<>(departmentService.createDepartment(request), HttpStatus.CREATED) ;
     }
 
      @PreAuthorize("hasRole('ADMIN')")
      @PostMapping("/create/modules")
-     public void createModule(@Valid @RequestBody CreateModuleRequest request) {
-         moduleService.createModule(request);
+      public ResponseEntity<ModuleResponse> createModule(@Valid @RequestBody CreateModuleRequest request) {
+          return new ResponseEntity<>(moduleService.createModule(request), HttpStatus.CREATED) ;
+     }
+
+     @PreAuthorize("hasRole('ADMIN')")
+     @PutMapping("/modules/update/{moduleId}")
+      public ResponseEntity<ModuleResponse> updateModule(@PathVariable Long moduleId ,@Valid @RequestBody CreateModuleRequest request) {
+          return new ResponseEntity<>(moduleService.updateModule(moduleId, request), HttpStatus.OK);
      }
 
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/modules")
-    public ResponseEntity<List<Module>> getAllModules() {
+    public ResponseEntity<List<ModuleResponse>> getAllModules() {
         return ResponseEntity.ok(moduleService.getAllModules());
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/modules/{id}")
-    public ResponseEntity<Module> getModuleById(@PathVariable Long id) {
+    public ResponseEntity<ModuleResponse> getModuleById(@PathVariable Long id) {
         return ResponseEntity.ok(moduleService.getModuleById(id));
     }
 
     @GetMapping("/semester/{semester}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<Module>> getBySemester(@PathVariable Semester semester) {
+    public ResponseEntity<List<ModuleResponse>> getBySemester(@PathVariable Semester semester) {
         return ResponseEntity.ok(moduleService.getModulesBySemester(semester));
     }
 
     @GetMapping("/departments/{departmentId}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<Module>> getByDepartment(@PathVariable Long departmentId) {
+    public ResponseEntity<List<ModuleResponse>> getByDepartment(@PathVariable Long departmentId) {
         return ResponseEntity.ok(moduleService.getModulesByDepartment(departmentId));
     }
 

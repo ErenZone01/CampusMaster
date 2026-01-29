@@ -1,8 +1,8 @@
 package com.campusmaster.campusmaster.application.service;
 
 import com.campusmaster.campusmaster.application.dto.CreateDepartmentRequest;
-import com.campusmaster.campusmaster.domain.model.pedagogy.Department;
+import com.campusmaster.campusmaster.application.dto.DepartmentResponse;
 
 public interface DepartmentService {
-    Department createDepartment(CreateDepartmentRequest request);
+    DepartmentResponse createDepartment(CreateDepartmentRequest request);
 }
