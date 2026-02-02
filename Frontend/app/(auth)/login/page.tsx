@@ -43,21 +43,22 @@ export default function LoginPage() {
     setIsSubmitting(true)
 
     try {
-      await signIn(email, password)
+      const result = await signIn(email, password)
       
-      // Wait for user data to be fetched
-      let attempts = 0
-      while (attempts < 20) {
-        await new Promise(resolve => setTimeout(resolve, 100))
-        attempts++
-        // The useEffect will handle the redirect when isAuthenticated changes
-      }
+      const user = result.user as any
+      const redirectPath = user?.role === 'admin' 
+        ? '/admin' 
+        : user?.role === 'teacher' 
+          ? '/teacher' 
+          : '/student'
       
       toast({ 
-        title: 'Connexion reussie', 
-        description: 'Bienvenue sur CampusMaster',
+        title: 'Connexion réussie', 
+        description: 'Redirection en cours...',
         variant: 'success'
       })
+
+      router.push(redirectPath)
       
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Identifiants incorrects'

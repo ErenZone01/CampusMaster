@@ -17,4 +17,5 @@ public interface UserRepository {
     List<User> findAll();
     void deleteById(Long id);
     boolean existsByRole(Role role);
+    long countByRole(Role role);
 }

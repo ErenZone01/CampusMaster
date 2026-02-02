@@ -1,6 +1,5 @@
 package com.campusmaster.campusmaster.application.service.impl;
 
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -33,14 +32,12 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public UserResponse register(StudentRequest request) {
-         // Logique d'enregistrement de l'utilisateur
-
         if (studentRepository.existsByEmail(request.getEmail())) {
-            throw new IllegalArgumentException("Email already in use");
+            throw new IllegalStateException("Cet email est déjà utilisé");
         }
 
         Department department = departmentRepository.findByCode(request.getDepartment_code())
-                .orElseThrow(() -> new IllegalArgumentException("Invalid department code"));
+                .orElseThrow(() -> new IllegalArgumentException("Code département invalide"));
 
         Student student = new Student();
         student.setFirstName(request.getFirstName());
@@ -73,25 +70,22 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse login(LoginRequest request) {
-        // Logique d'authentification de l'utilisateur
-        User user = userRepository.findByEmail(request.getEmail()).orElseThrow(() ->
-         new IllegalArgumentException("Invalid email or password")
-        );
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow(() -> new IllegalArgumentException("Email ou mot de passe incorrect"));
+
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            throw new IllegalArgumentException("Email ou mot de passe incorrect");
+        }
 
         if (user.getRole() == Role.STUDENT) {
             Student student = studentRepository.findByEmail(request.getEmail()).get();
             if (!student.isValidated()){
-                throw new AccessDeniedException("Profil étudiant non validé");
+                throw new IllegalStateException("Votre compte étudiant n'est pas encore validé par un administrateur");
             }
         }
 
 
-        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new IllegalArgumentException("Invalid email, role or password");
-        }
-
-
-        String token = jwtService.generateToken(user.getEmail());
+        String token = jwtService.generateToken(user.getEmail(), user.getRole().name());
         AuthResponse response = new AuthResponse();
         response.setToken(token);
         response.setUser(UserResponse.builder()

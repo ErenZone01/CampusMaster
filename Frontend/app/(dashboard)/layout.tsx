@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react"
 import { useRouter } from 'next/navigation'
 import { ThemeProvider } from '@/components/providers/theme-provider'
 import { DashboardShell } from '@/components/layout/dashboard-shell'
-import { AuthService } from '@/lib/mock'
+import { AuthService } from '@/lib/services/auth.service'
 import type { UserPublic } from '@/types'
 
 export default function DashboardLayout({

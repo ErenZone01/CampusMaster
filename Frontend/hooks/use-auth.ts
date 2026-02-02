@@ -1,6 +1,6 @@
 'use client'
 
-import { AuthService } from '@/lib/mock'
+import { AuthService } from '@/lib/services/auth.service'
 import type { UserPublic, UserRole } from '@/types'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
@@ -13,8 +13,15 @@ interface AuthState {
 }
 
 async function fetchCurrentUser(): Promise<UserPublic | null> {
-  const result = await AuthService.getCurrentUser()
-  return result.success ? result.data || null : null
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/login')) {
+    return null
+  }
+  try {
+    const result = await AuthService.getCurrentUser()
+    return result.success ? result.data || null : null
+  } catch (error) {
+    return null
+  }
 }
 
 export function useAuth() {
@@ -37,10 +44,9 @@ export function useAuth() {
       throw new Error(result.error || 'Échec de connexion')
     }
 
-    // Refresh user data
     mutate()
     
-    return { success: true }
+    return { success: true, user: result.data }
   }, [mutate])
 
   const signUp = useCallback(async (
