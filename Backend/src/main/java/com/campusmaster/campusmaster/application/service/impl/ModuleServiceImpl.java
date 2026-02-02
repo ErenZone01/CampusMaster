@@ -13,7 +13,6 @@ import com.campusmaster.campusmaster.application.service.ModuleService;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Department;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Module;
 import com.campusmaster.campusmaster.application.dto.ModuleResponse;
-import com.campusmaster.campusmaster.application.dto.DepartmentResponse;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Semester;
 import com.campusmaster.campusmaster.domain.model.user.Teacher;
 

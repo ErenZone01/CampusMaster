@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { UserService, CourseService, DepartmentService, EnrollmentService } from '@/lib/mock'
+import { UserService, CourseService, EnrollmentService } from '@/lib/mock'
+import { DepartmentApi } from '@/lib/api/services/department.api'
 import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -84,11 +85,8 @@ export default function AdminDashboardPage() {
       const courses = coursesResult.success && coursesResult.data ? coursesResult.data.data : []
       const activeCourses = courses.filter(c => c.status === 'published').length
 
-      // Fetch departments
-      const deptsResult = await DepartmentService.getDepartments()
-      const departments = deptsResult.success && deptsResult.data ? deptsResult.data : []
+      const departments = await DepartmentApi.getDepartments()
 
-      // Fetch enrollments
       const enrollments = await EnrollmentService.getStudentEnrollments('') // We'll count all later
       
       setStats({

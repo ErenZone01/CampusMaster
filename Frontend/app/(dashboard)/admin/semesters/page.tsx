@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRequireAuth } from '@/hooks/use-auth'
-import { SemesterService } from '@/lib/mock'
+import { SemesterApi } from '@/lib/api/services/semester.api'
 import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -43,14 +43,23 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Search, Plus, Edit, Trash2, Calendar, MoreVertical } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 interface Semester {
-  id: string
+  id: number
   name: string
   code: string
-  start_date: string
-  end_date: string
-  created_at: string
+  startDate: string
+  endDate: string
+  isCurrent: boolean
+  createdAt?: string
+  updatedAt?: string
 }
 
 interface SemesterForm {
@@ -86,10 +95,8 @@ export default function AdminSemestersPage() {
     if (showLoader) setIsLoading(true)
     else setIsRefetching(true)
     try {
-      const result = await SemesterService.getSemesters()
-      if (!result.success) throw new Error(result.error)
-
-      setSemesters(result.data || [])
+      const data = await SemesterApi.getSemesters()
+      setSemesters(data || [])
     } catch (error) {
       console.error('Error fetching semesters:', error)
       toast({
@@ -115,7 +122,7 @@ export default function AdminSemestersPage() {
 
   // Handle create semester
   const handleCreateSemester = async () => {
-    if (!formData.name.trim() || !formData.code.trim() || !formData.start_date || !formData.end_date) {
+    if (!formData.name || !formData.start_date || !formData.end_date) {
       toast({
         title: 'Erreur',
         description: 'Veuillez remplir tous les champs obligatoires',
@@ -135,38 +142,26 @@ export default function AdminSemestersPage() {
 
     setIsSubmitting(true)
     try {
-      const result = await SemesterService.createSemester({
+      await SemesterApi.createSemester({
         name: formData.name,
-        code: formData.code.toUpperCase(),
-        start_date: formData.start_date,
-        end_date: formData.end_date,
+        code: formData.code,
+        startDate: formData.start_date,
+        endDate: formData.end_date,
       })
 
-      if (!result.success) {
-        if (result.error?.includes('existe déjà')) {
-          toast({
-            title: 'Erreur',
-            description: 'Ce code de semestre existe déjà',
-            variant: 'destructive',
-          })
-        } else {
-          throw new Error(result.error)
-        }
-      } else {
-        toast({
-          title: 'Succès',
-          description: 'Semestre créé avec succès',
-          variant: 'success',
-        })
-        resetForm()
-        setIsCreateDialogOpen(false)
-        await fetchSemesters(false)
-      }
-    } catch (error) {
+      toast({
+        title: 'Succès',
+        description: 'Semestre créé avec succès',
+        variant: 'success',
+      })
+      resetForm()
+      setIsCreateDialogOpen(false)
+      await fetchSemesters(false)
+    } catch (error: any) {
       console.error('Error creating semester:', error)
       toast({
         title: 'Erreur',
-        description: 'Impossible de créer le semestre',
+        description: error?.message || 'Impossible de créer le semestre',
         variant: 'destructive',
       })
     } finally {
@@ -176,7 +171,7 @@ export default function AdminSemestersPage() {
 
   // Handle update semester
   const handleUpdateSemester = async () => {
-    if (!editingSemester || !formData.name.trim() || !formData.code.trim() || !formData.start_date || !formData.end_date) {
+    if (!editingSemester || !formData.name || !formData.start_date || !formData.end_date) {
       toast({
         title: 'Erreur',
         description: 'Veuillez remplir tous les champs obligatoires',
@@ -196,39 +191,27 @@ export default function AdminSemestersPage() {
 
     setIsSubmitting(true)
     try {
-      const result = await SemesterService.updateSemester(editingSemester.id, {
+      await SemesterApi.updateSemester(String(editingSemester.id), {
         name: formData.name,
-        code: formData.code.toUpperCase(),
-        start_date: formData.start_date,
-        end_date: formData.end_date,
+        code: formData.code,
+        startDate: formData.start_date,
+        endDate: formData.end_date,
       })
 
-      if (!result.success) {
-        if (result.error?.includes('existe déjà')) {
-          toast({
-            title: 'Erreur',
-            description: 'Ce code de semestre existe déjà',
-            variant: 'destructive',
-          })
-        } else {
-          throw new Error(result.error)
-        }
-      } else {
-        toast({
-          title: 'Succès',
-          description: 'Semestre mis à jour avec succès',
-          variant: 'success',
-        })
-        resetForm()
-        setIsEditDialogOpen(false)
-        setEditingSemester(null)
-        await fetchSemesters(false)
-      }
-    } catch (error) {
+      toast({
+        title: 'Succès',
+        description: 'Semestre mis à jour avec succès',
+        variant: 'success',
+      })
+      resetForm()
+      setIsEditDialogOpen(false)
+      setEditingSemester(null)
+      await fetchSemesters(false)
+    } catch (error: any) {
       console.error('Error updating semester:', error)
       toast({
         title: 'Erreur',
-        description: 'Impossible de mettre à jour le semestre',
+        description: error?.message || 'Impossible de mettre à jour le semestre',
         variant: 'destructive',
       })
     } finally {
@@ -237,11 +220,9 @@ export default function AdminSemestersPage() {
   }
 
   // Handle delete semester
-  const handleDeleteSemester = async (id: string) => {
+  const handleDeleteSemester = async (id: number) => {
     try {
-      const result = await SemesterService.deleteSemester(id)
-
-      if (!result.success) throw new Error(result.error)
+      await SemesterApi.deleteSemester(String(id))
 
       toast({
         title: 'Succès',
@@ -265,8 +246,8 @@ export default function AdminSemestersPage() {
     setFormData({
       name: semester.name,
       code: semester.code,
-      start_date: semester.start_date,
-      end_date: semester.end_date,
+      start_date: semester.startDate,
+      end_date: semester.endDate,
     })
     setIsEditDialogOpen(true)
   }
@@ -274,8 +255,8 @@ export default function AdminSemestersPage() {
   // Get status badge
   const getStatusBadge = (semester: Semester) => {
     const now = new Date()
-    const startDate = new Date(semester.start_date)
-    const endDate = new Date(semester.end_date)
+    const startDate = new Date(semester.startDate)
+    const endDate = new Date(semester.endDate)
 
     if (startDate <= now && now <= endDate) {
       return <Badge className="bg-green-600">En cours</Badge>
@@ -347,22 +328,31 @@ export default function AdminSemestersPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="create-name">Nom *</Label>
-                  <Input
-                    id="create-name"
-                    placeholder="ex: Semestre 1"
+                  <Label htmlFor="create-name">Semestre *</Label>
+                  <Select
                     value={formData.name}
-                    onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  />
+                    onValueChange={(value) => {
+                      const year = new Date().getFullYear()
+                      const code = value === 'Semestre 1' ? `S1-${year}` : `S2-${year}`
+                      setFormData({ ...formData, name: value, code })
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sélectionnez un semestre" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Semestre 1">Semestre 1</SelectItem>
+                      <SelectItem value="Semestre 2">Semestre 2</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
-                  <Label htmlFor="create-code">Code *</Label>
+                  <Label htmlFor="create-code">Code (auto-généré)</Label>
                   <Input
                     id="create-code"
-                    placeholder="ex: S1"
                     value={formData.code}
-                    onChange={e => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                    maxLength={10}
+                    disabled
+                    className="bg-muted"
                   />
                 </div>
               </div>
@@ -452,13 +442,13 @@ export default function AdminSemestersPage() {
                         <Badge variant="secondary">{semester.code}</Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {formatDate(semester.start_date)} - {formatDate(semester.end_date)}
+                        {formatDate(semester.startDate)} - {formatDate(semester.endDate)}
                       </TableCell>
                       <TableCell>
                         {getStatusBadge(semester)}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {new Date(semester.created_at).toLocaleDateString('fr-FR')}
+                        {semester.createdAt ? new Date(semester.createdAt).toLocaleDateString('fr-FR') : '-'}
                       </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
@@ -526,20 +516,31 @@ export default function AdminSemestersPage() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="edit-name">Nom *</Label>
-                <Input
-                  id="edit-name"
+                <Label htmlFor="edit-name">Semestre *</Label>
+                <Select
                   value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
-                />
+                  onValueChange={(value) => {
+                    const year = new Date().getFullYear()
+                    const code = value === 'Semestre 1' ? `S1-${year}` : `S2-${year}`
+                    setFormData({ ...formData, name: value, code })
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sélectionnez un semestre" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Semestre 1">Semestre 1</SelectItem>
+                    <SelectItem value="Semestre 2">Semestre 2</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div>
-                <Label htmlFor="edit-code">Code *</Label>
+                <Label htmlFor="edit-code">Code (auto-généré)</Label>
                 <Input
                   id="edit-code"
                   value={formData.code}
-                  onChange={e => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                  maxLength={10}
+                  disabled
+                  className="bg-muted"
                 />
               </div>
             </div>

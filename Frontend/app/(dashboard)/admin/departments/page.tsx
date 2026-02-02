@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRequireAuth } from '@/hooks/use-auth'
-import { DepartmentService, UserService } from '@/lib/mock'
+import { DepartmentApi } from '@/lib/api/services/department.api'
 import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -18,13 +18,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -52,25 +45,14 @@ import {
 import { Search, Plus, Edit, Trash2, Building2, MoreVertical } from 'lucide-react'
 
 interface Department {
-  id: string
+  id: number
   name: string
   code: string
-  description: string | null
-  head_id: string | null
-  created_at: string
 }
 
 interface DepartmentForm {
   name: string
   code: string
-  description: string
-  head_id: string
-}
-
-interface TeacherOption {
-  id: string
-  first_name: string
-  last_name: string
 }
 
 export default function DepartmentsPage() {
@@ -80,9 +62,7 @@ export default function DepartmentsPage() {
 
   // States
   const [departments, setDepartments] = useState<Department[]>([])
-  const [teachers, setTeachers] = useState<TeacherOption[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [isRefetching, setIsRefetching] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -90,59 +70,36 @@ export default function DepartmentsPage() {
   const [formData, setFormData] = useState<DepartmentForm>({
     name: '',
     code: '',
-    description: '',
-    head_id: '',
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Fetch departments and teachers (initial load)
-  const fetchDepartmentsAndTeachers = async (showLoader = true) => {
-    if (showLoader) setIsLoading(true)
-    else setIsRefetching(true)
+  // Fetch departments
+  const fetchDepartments = async () => {
+    setIsLoading(true)
     try {
-      // Fetch departments
-      const deptResult = await DepartmentService.getDepartments()
-      if (!deptResult.success) throw new Error(deptResult.error)
-
-      // Fetch teachers (all users with role='teacher')
-      const usersResult = await UserService.getUsers()
-      if (!usersResult.success) throw new Error(usersResult.error)
-      const usersData = usersResult.data?.data || []
-      const teachersData = usersData.filter((u: any) => u.role === 'teacher').map((t: any) => ({
-        id: t.id,
-        first_name: t.first_name,
-        last_name: t.last_name
-      }))
-
-      setDepartments(deptResult.data || [])
-      setTeachers(teachersData)
-    } catch (error) {
-      console.error('Error fetching data:', error)
+      const data = await DepartmentApi.getDepartments()
+      setDepartments(data)
+    } catch (error: any) {
+      console.error('Error fetching departments:', error)
       toast({
         title: 'Erreur',
-        description: 'Impossible de charger les données',
+        description: 'Impossible de charger les départements',
         variant: 'destructive',
       })
     } finally {
-      if (showLoader) setIsLoading(false)
-      else setIsRefetching(false)
+      setIsLoading(false)
     }
   }
 
-  // Get teacher name from ID
-  const getTeacherName = (headId: string | null) => {
-    if (!headId) return 'Aucun'
-    const teacher = teachers.find(t => t.id === headId)
-    return teacher ? `${teacher.first_name} ${teacher.last_name}` : 'Inconnu'
-  }
+  useEffect(() => {
+    fetchDepartments()
+  }, [])
 
   // Reset form
   const resetForm = () => {
     setFormData({
       name: '',
       code: '',
-      description: '',
-      head_id: '',
     })
   }
 
@@ -159,37 +116,22 @@ export default function DepartmentsPage() {
 
     setIsSubmitting(true)
     try {
-      const result = await DepartmentService.createDepartment({
+      await DepartmentApi.createDepartment({
         name: formData.name,
         code: formData.code.toUpperCase(),
-        description: formData.description || '',
       })
 
-      if (!result.success) {
-        if (result.error?.includes('existe déjà')) {
-          toast({
-            title: 'Erreur',
-            description: 'Ce code de département existe déjà',
-            variant: 'destructive',
-          })
-        } else {
-          throw new Error(result.error)
-        }
-      } else {
-        toast({
-          title: 'Succès',
-          description: 'Département créé avec succès',
-          variant: 'success',
-        })
-        resetForm()
-        setIsCreateDialogOpen(false)
-        await fetchDepartmentsAndTeachers(false)
-      }
-    } catch (error) {
-      console.error('Error creating department:', error)
+      toast({
+        title: 'Succès',
+        description: 'Département créé avec succès',
+      })
+      setIsCreateDialogOpen(false)
+      resetForm()
+      await fetchDepartments()
+    } catch (error: any) {
       toast({
         title: 'Erreur',
-        description: 'Impossible de créer le département',
+        description: error.response?.data || 'Impossible de créer le département',
         variant: 'destructive',
       })
     } finally {
@@ -210,38 +152,23 @@ export default function DepartmentsPage() {
 
     setIsSubmitting(true)
     try {
-      const result = await DepartmentService.updateDepartment(editingDept.id, {
+      await DepartmentApi.updateDepartment(editingDept.id.toString(), {
         name: formData.name,
         code: formData.code.toUpperCase(),
-        description: formData.description || '',
       })
 
-      if (!result.success) {
-        if (result.error?.includes('existe déjà')) {
-          toast({
-            title: 'Erreur',
-            description: 'Ce code de département existe déjà',
-            variant: 'destructive',
-          })
-        } else {
-          throw new Error(result.error)
-        }
-      } else {
-        toast({
-          title: 'Succès',
-          description: 'Département mis à jour avec succès',
-          variant: 'success',
-        })
-        resetForm()
-        setIsEditDialogOpen(false)
-        setEditingDept(null)
-        await fetchDepartmentsAndTeachers(false)
-      }
-    } catch (error) {
-      console.error('Error updating department:', error)
+      toast({
+        title: 'Succès',
+        description: 'Département modifié avec succès',
+      })
+      setIsEditDialogOpen(false)
+      setEditingDept(null)
+      resetForm()
+      await fetchDepartments()
+    } catch (error: any) {
       toast({
         title: 'Erreur',
-        description: 'Impossible de mettre à jour le département',
+        description: error.response?.data || 'Impossible de modifier le département',
         variant: 'destructive',
       })
     } finally {
@@ -250,50 +177,37 @@ export default function DepartmentsPage() {
   }
 
   // Handle delete department
-  const handleDeleteDepartment = async (id: string) => {
+  const handleDeleteDepartment = async (id: number) => {
     try {
-      const result = await DepartmentService.deleteDepartment(id)
-
-      if (!result.success) throw new Error(result.error)
-
+      await DepartmentApi.deleteDepartment(id.toString())
       toast({
         title: 'Succès',
         description: 'Département supprimé avec succès',
-        variant: 'success',
       })
-      await fetchDepartmentsAndTeachers(false)
-    } catch (error) {
-      console.error('Error deleting department:', error)
+      await fetchDepartments()
+    } catch (error: any) {
       toast({
         title: 'Erreur',
-        description: 'Impossible de supprimer le département',
+        description: error.response?.data || 'Impossible de supprimer le département',
         variant: 'destructive',
       })
     }
   }
 
   // Handle edit button
-  const handleEditDept = (dept: Department) => {
+  const handleEditDepartment = (dept: Department) => {
     setEditingDept(dept)
     setFormData({
       name: dept.name,
       code: dept.code,
-      description: dept.description || '',
-      head_id: dept.head_id || '',
     })
     setIsEditDialogOpen(true)
   }
 
-  // Load data on mount
-  useEffect(() => {
-    fetchDepartmentsAndTeachers()
-  }, [])
-
-  // Filter departments by search query
-  const filteredDepartments = departments.filter(
-    dept =>
-      dept.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      dept.code.toLowerCase().includes(searchQuery.toLowerCase())
+  // Filter departments
+  const filteredDepartments = (departments || []).filter((dept) =>
+    dept.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    dept.code.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
   if (isLoading) {
@@ -359,30 +273,6 @@ export default function DepartmentsPage() {
                   />
                 </div>
               </div>
-              <div>
-                <Label htmlFor="create-desc">Description</Label>
-                <Input
-                  id="create-desc"
-                  placeholder="Description optionnelle"
-                  value={formData.description}
-                  onChange={e => setFormData({ ...formData, description: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="create-head">Responsable</Label>
-                <Select value={formData.head_id || ''} onValueChange={value => setFormData({ ...formData, head_id: value })}>
-                  <SelectTrigger id="create-head">
-                    <SelectValue placeholder="Sélectionner un responsable" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {teachers.map(teacher => (
-                      <SelectItem key={teacher.id} value={teacher.id}>
-                        {teacher.first_name} {teacher.last_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
               <Button
                 onClick={handleCreateDepartment}
                 disabled={isSubmitting}
@@ -402,7 +292,7 @@ export default function DepartmentsPage() {
             <Building2 className="w-10 h-10 text-blue-500" />
             <div>
               <p className="text-sm text-gray-500">Nombre total de départements</p>
-              <p className="text-3xl font-bold">{departments.length}</p>
+              <p className="text-3xl font-bold">{departments?.length || 0}</p>
             </div>
           </div>
         </CardContent>
@@ -425,7 +315,7 @@ export default function DepartmentsPage() {
           {filteredDepartments.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-muted-foreground">
-                {departments.length === 0
+                {(departments?.length || 0) === 0
                   ? 'Aucun département créé'
                   : 'Aucun résultat ne correspond à votre recherche'}
               </p>
@@ -437,9 +327,6 @@ export default function DepartmentsPage() {
                   <TableRow>
                     <TableHead>Nom</TableHead>
                     <TableHead>Code</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Responsable</TableHead>
-                    <TableHead>Créé le</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -450,15 +337,6 @@ export default function DepartmentsPage() {
                       <TableCell>
                         <Badge variant="secondary">{dept.code}</Badge>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground line-clamp-2">
-                        {dept.description || '-'}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {getTeacherName(dept.head_id)}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {new Date(dept.created_at).toLocaleDateString('fr-FR')}
-                      </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -467,7 +345,7 @@ export default function DepartmentsPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleEditDept(dept)}>
+                            <DropdownMenuItem onClick={() => handleEditDepartment(dept)}>
                               <Edit className="mr-2 h-4 w-4" />
                               Modifier
                             </DropdownMenuItem>
@@ -544,29 +422,6 @@ export default function DepartmentsPage() {
                   maxLength={10}
                 />
               </div>
-            </div>
-            <div>
-              <Label htmlFor="edit-desc">Description</Label>
-              <Input
-                id="edit-desc"
-                value={formData.description}
-                onChange={e => setFormData({ ...formData, description: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label htmlFor="edit-head">Responsable</Label>
-              <Select value={formData.head_id || ''} onValueChange={value => setFormData({ ...formData, head_id: value })}>
-                <SelectTrigger id="edit-head">
-                  <SelectValue placeholder="Sélectionner un responsable" />
-                </SelectTrigger>
-                <SelectContent>
-                  {teachers.map(teacher => (
-                    <SelectItem key={teacher.id} value={teacher.id}>
-                      {teacher.first_name} {teacher.last_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
             <Button
               onClick={handleUpdateDepartment}

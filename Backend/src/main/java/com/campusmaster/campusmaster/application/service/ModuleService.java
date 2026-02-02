@@ -4,7 +4,6 @@ import java.util.List;
 
 import com.campusmaster.campusmaster.application.dto.CreateModuleRequest;
 import com.campusmaster.campusmaster.application.dto.ModuleResponse;
-import com.campusmaster.campusmaster.application.dto.DepartmentResponse;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Semester;
 
 public interface ModuleService {
