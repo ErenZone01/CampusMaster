@@ -188,12 +188,12 @@ export default function AdminDashboardPage() {
               Paramètres
             </Link>
           </Button>
-          <Button asChild>
+          {/* <Button asChild>
             <Link href="/admin/users/create">
               <UserPlus className="mr-2 h-4 w-4" />
               Nouvel utilisateur
             </Link>
-          </Button>
+          </Button> */}
         </div>
       </div>
 

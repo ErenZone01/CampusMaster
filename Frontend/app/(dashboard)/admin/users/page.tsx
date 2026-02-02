@@ -1,31 +1,44 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import { UserService } from '@/lib/mock'
-import { useRequireAuth } from '@/hooks/use-auth'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { useToast } from '@/hooks/use-toast'
+import { useState, useEffect } from "react";
+import {
+  UserApi,
+  type User as ApiUser,
+  type CreateUserRequest,
+  type UpdateUserRequest,
+  type Department,
+} from "@/lib/api/services/user.api";
+import { useRequireAuth } from "@/hooks/use-auth";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui/dialog'
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -33,14 +46,13 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
+} from "@/components/ui/table";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import Link from 'next/link'
+} from "@/components/ui/dropdown-menu";
 import {
   Search,
   UserPlus,
@@ -50,216 +62,231 @@ import {
   Shield,
   CheckCircle,
   XCircle,
-} from 'lucide-react'
+} from "lucide-react";
 
 interface User {
-  id: string
-  first_name: string
-  last_name: string
-  email: string
-  role: string
-  is_active: boolean
-  created_at: string
-}
-
-interface CreateUserForm {
-  first_name: string
-  last_name: string
-  email: string
-  password: string
-  role: 'student' | 'teacher' | 'admin'
+  id: number;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  enabled?: boolean;
+  // Champs spécifiques pour Student
+  dateOfBirth?: string;
+  departmentId?: number;
+  departmentName?: string;
+  gender?: string;
+  validated?: boolean;
+  ine?: string;
 }
 
 export default function AdminUsersPage() {
-  useRequireAuth(['admin'])
+  useRequireAuth(["admin"]);
 
-  const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [roleFilter, setRoleFilter] = useState<string>('all')
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isCreating, setIsCreating] = useState(false)
-  const [formData, setFormData] = useState<CreateUserForm>({
-    first_name: '',
-    last_name: '',
-    email: '',
-    password: '',
-    role: 'student',
-  })
-  const { toast } = useToast()
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [createForm, setCreateForm] = useState<CreateUserRequest>({
+    email: "",
+    firstName: "",
+    lastName: "",
+    password: "",
+    role: "STUDENT",
+    dateOfBirth: "",
+    departmentId: undefined,
+    gender: "M",
+  });
+  const [editForm, setEditForm] = useState<UpdateUserRequest>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
-    fetchUsers()
-  }, [])
+    fetchUsers();
+  }, [roleFilter, currentPage]);
+
+  useEffect(() => {
+    loadDepartments();
+  }, []);
+
+  const loadDepartments = async () => {
+    try {
+      const depts = await UserApi.getDepartments();
+      setDepartments(depts);
+    } catch (error) {
+      console.error("Error loading departments:", error);
+    }
+  };
 
   const fetchUsers = async () => {
+    setLoading(true);
     try {
-      const result = await UserService.getUsers({}, 1, 1000)
-      
-      if (!result.success || !result.data) {
-        throw new Error(result.error || 'Erreur lors du chargement')
-      }
+      const result = await UserApi.getUsers({
+        role: roleFilter !== "all" ? roleFilter : undefined,
+        page: currentPage,
+        size: 20,
+      });
 
-      setUsers(result.data.data)
-    } catch (error) {
-      console.error('Error fetching users:', error)
+      setUsers(result.content);
+      setTotalPages(result.totalPages);
+    } catch (error: any) {
+      console.error("Error fetching users:", error);
       toast({
-        description: 'Erreur lors du chargement des utilisateurs',
-        variant: 'destructive',
-      })
+        description:
+          error.message || "Erreur lors du chargement des utilisateurs",
+        variant: "destructive",
+      });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleCreateUser = async () => {
-    if (!formData.first_name || !formData.last_name || !formData.email || !formData.password) {
-      toast({
-        description: 'Veuillez remplir tous les champs',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(formData.email)) {
-      toast({
-        description: 'Veuillez entrer une adresse email valide',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    setIsCreating(true)
+    setIsSubmitting(true);
     try {
-      const result = await UserService.createUser({
-        email: formData.email,
-        password: formData.password,
-        first_name: formData.first_name,
-        last_name: formData.last_name,
-        role: formData.role,
-      })
-
-      if (!result.success) {
-        toast({
-          description: result.error || 'Erreur lors de la création',
-          variant: 'destructive',
-        })
-        setIsCreating(false)
-        return
-      }
-
-      setFormData({
-        first_name: '',
-        last_name: '',
-        email: '',
-        password: '',
-        role: 'student',
-      })
-      setIsCreateDialogOpen(false)
-      await fetchUsers()
+      await UserApi.createUser(createForm);
+      setIsCreateDialogOpen(false);
+      setCreateForm({
+        email: "",
+        firstName: "",
+        lastName: "",
+        password: "",
+        role: "STUDENT",
+        dateOfBirth: "",
+        departmentId: undefined,
+        gender: "M",
+      });
+      await fetchUsers();
       toast({
-        description: 'Utilisateur créé avec succès',
-      })
+        description: "Utilisateur créé avec succès",
+      });
     } catch (error: any) {
-      console.error('Error creating user:', error)
       toast({
-        description: error.message || 'Erreur lors de la création',
-        variant: 'destructive',
-      })
+        description: error.message || "Erreur lors de la création",
+        variant: "destructive",
+      });
     } finally {
-      setIsCreating(false)
+      setIsSubmitting(false);
     }
-  }
+  };
 
-  const handleDeleteUser = async (userId: string) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cet utilisateur?')) return
+  const handleEditUser = async () => {
+    if (!selectedUser) return;
 
+    setIsSubmitting(true);
     try {
-      const result = await UserService.deleteUser(userId)
-
-      if (!result.success) throw new Error(result.error)
-
-      setUsers(users.filter(u => u.id !== userId))
+      await UserApi.updateUser(selectedUser.id.toString(), editForm);
+      setIsEditDialogOpen(false);
+      setSelectedUser(null);
+      setEditForm({});
+      await fetchUsers();
       toast({
-        description: 'Utilisateur supprimé',
-      })
+        description: "Utilisateur modifié avec succès",
+      });
     } catch (error: any) {
       toast({
-        description: 'Erreur lors de la suppression',
-        variant: 'destructive',
-      })
+        description: error.message || "Erreur lors de la modification",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
     }
-  }
+  };
 
-  const handleToggleStatus = async (userId: string, currentStatus: boolean) => {
+  const openEditDialog = async (user: User) => {
+    setSelectedUser(user);
+
+    // Charger les détails complets de l'utilisateur depuis l'API
     try {
-      const result = await UserService.toggleUserStatus(userId)
+      const userDetails = await UserApi.getUserById(user.id.toString());
+      
+      // Convertir la date au format YYYY-MM-DD pour l'input date
+      let formattedDate = "";
+      if (userDetails.dateOfBirth) {
+        const date = new Date(userDetails.dateOfBirth);
+        formattedDate = date.toISOString().split('T')[0];
+      }
+      
+      setEditForm({
+        email: userDetails.email,
+        firstName: userDetails.firstName,
+        lastName: userDetails.lastName,
+        enabled: userDetails.enabled,
+        role: userDetails.role.toUpperCase(),
+        dateOfBirth: formattedDate,
+        departmentId: userDetails.departmentId,
+        gender: userDetails.gender || "M",
+        validated: userDetails.validated,
+      });
+    } catch (error) {
+      console.error("Error loading user details:", error);
+      // Fallback sur les données de base
+      setEditForm({
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        enabled: user.enabled,
+        role: user.role.toUpperCase(),
+        dateOfBirth: user.dateOfBirth || "",
+        departmentId: user.departmentId,
+        gender: user.gender || "M",
+        validated: user.validated,
+      });
+    }
 
-      if (!result.success) throw new Error(result.error)
+    setIsEditDialogOpen(true);
+  };
 
-      setUsers(users.map(u =>
-        u.id === userId ? { ...u, is_active: !currentStatus } : u
-      ))
+  const handleDeleteUser = async (userId: number) => {
+    if (!confirm("Êtes-vous sûr de vouloir désactiver cet utilisateur?"))
+      return;
+
+    try {
+      await UserApi.deleteUser(userId.toString());
+      await fetchUsers();
       toast({
-        description: currentStatus ? 'Utilisateur désactivé' : 'Utilisateur activé',
-      })
+        description: "Utilisateur désactivé",
+      });
     } catch (error: any) {
       toast({
-        description: 'Erreur',
-        variant: 'destructive',
-      })
+        description: error.message || "Erreur lors de la suppression",
+        variant: "destructive",
+      });
     }
-  }
-
-  const handleUpdateRole = async (userId: string, newRole: string) => {
-    try {
-      const result = await UserService.updateUser(userId, { 
-        role: newRole as 'student' | 'teacher' | 'admin' 
-      })
-
-      if (!result.success) throw new Error(result.error)
-
-      setUsers(users.map(u =>
-        u.id === userId ? { ...u, role: newRole as any } : u
-      ))
-      toast({
-        description: 'Rôle mis à jour',
-      })
-    } catch (error: any) {
-      toast({
-        description: 'Erreur',
-        variant: 'destructive',
-      })
-    }
-  }
+  };
 
   const getRoleBadge = (role: string) => {
     switch (role) {
-      case 'admin':
-        return <Badge className="bg-red-600">Admin</Badge>
-      case 'teacher':
-        return <Badge variant="secondary">Enseignant</Badge>
-      case 'student':
-        return <Badge variant="outline">Étudiant</Badge>
+      case "admin":
+        return <Badge className="bg-red-600">Admin</Badge>;
+      case "teacher":
+        return <Badge variant="secondary">Enseignant</Badge>;
+      case "student":
+        return <Badge variant="outline">Étudiant</Badge>;
       default:
-        return <Badge variant="outline">{role}</Badge>
+        return <Badge variant="outline">{role}</Badge>;
     }
-  }
+  };
 
   const getInitials = (firstName: string, lastName: string) => {
-    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase()
-  }
+    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+  };
 
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = 
-      user.first_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.last_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesRole = roleFilter === 'all' || user.role === roleFilter
-    return matchesSearch && matchesRole
-  })
+  const filteredUsers = users.filter((user) => {
+    const matchesSearch =
+      user.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesRole =
+      roleFilter === "all" || user.role.toLowerCase() === roleFilter;
+    return matchesSearch && matchesRole;
+  });
 
   if (loading) {
     return (
@@ -271,14 +298,16 @@ export default function AdminUsersPage() {
           ))}
         </div>
       </div>
-    )
+    );
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Gestion des utilisateurs</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Gestion des utilisateurs
+          </h1>
           <p className="text-muted-foreground">
             Gérez tous les utilisateurs du système
           </p>
@@ -287,84 +316,166 @@ export default function AdminUsersPage() {
           <DialogTrigger asChild>
             <Button>
               <UserPlus className="mr-2 h-4 w-4" />
-              Créer un utilisateur
+              Créer utilisateur
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent>
             <DialogHeader>
-              <DialogTitle>Créer un nouvel utilisateur</DialogTitle>
+              <DialogTitle>Créer un utilisateur</DialogTitle>
               <DialogDescription>
-                Remplissez les informations pour créer un nouveau compte
+                Ajoutez un nouvel utilisateur au système
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="first_name">Prénom</Label>
+                <Label htmlFor="create-firstName">Prénom</Label>
                 <Input
-                  id="first_name"
-                  placeholder="Jean"
-                  value={formData.first_name}
-                  onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                  id="create-firstName"
+                  value={createForm.firstName}
+                  onChange={(e) =>
+                    setCreateForm({ ...createForm, firstName: e.target.value })
+                  }
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="last_name">Nom</Label>
+                <Label htmlFor="create-lastName">Nom</Label>
                 <Input
-                  id="last_name"
-                  placeholder="Dupont"
-                  value={formData.last_name}
-                  onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                  id="create-lastName"
+                  value={createForm.lastName}
+                  onChange={(e) =>
+                    setCreateForm({ ...createForm, lastName: e.target.value })
+                  }
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="create-email">Email</Label>
                 <Input
-                  id="email"
+                  id="create-email"
                   type="email"
-                  placeholder="jean@example.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  value={createForm.email}
+                  onChange={(e) =>
+                    setCreateForm({ ...createForm, email: e.target.value })
+                  }
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Mot de passe</Label>
+                <Label htmlFor="create-password">Mot de passe</Label>
                 <Input
-                  id="password"
+                  id="create-password"
                   type="password"
-                  placeholder="••••••••"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  value={createForm.password}
+                  onChange={(e) =>
+                    setCreateForm({ ...createForm, password: e.target.value })
+                  }
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="role">Rôle</Label>
-                <Select value={formData.role} onValueChange={(value: any) => setFormData({ ...formData, role: value })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="student">Étudiant</SelectItem>
-                    <SelectItem value="teacher">Enseignant</SelectItem>
-                    <SelectItem value="admin">Administrateur</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="space-y-2 flex flex-col md:flex-row md:space-x-4 md:space-y-0">
+                <div className="space-y-2 w-full">
+                  <Label htmlFor="create-role">Rôle</Label>
+                  <Select
+                    value={createForm.role}
+                    onValueChange={(value: any) =>
+                      setCreateForm({ ...createForm, role: value })
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="STUDENT">Étudiant</SelectItem>
+                      <SelectItem value="TEACHER">Enseignant</SelectItem>
+                      <SelectItem value="ADMIN">Administrateur</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {createForm.role === "STUDENT" && (
+                  <div className="space-y-2 w-full">
+                    <Label htmlFor="create-department">Département</Label>
+                    <Select
+                      value={createForm.departmentId?.toString()}
+                      onValueChange={(value) =>
+                        setCreateForm({
+                          ...createForm,
+                          departmentId: parseInt(value),
+                        })
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Sélectionnez département" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {departments.map((dept) => (
+                          <SelectItem key={dept.id} value={dept.id.toString()}>
+                            {dept.name} ({dept.code})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
-              <Button
-                onClick={handleCreateUser}
-                disabled={isCreating}
-                className="w-full"
-              >
-                {isCreating ? 'Création...' : 'Créer'}
-              </Button>
+
+              {createForm.role === "STUDENT" && (
+                <>
+                  <div className="space-y-2 flex flex-col md:flex-row md:space-x-4 md:space-y-0">
+                    <div className="space-y-2 w-full">
+                      <Label htmlFor="create-dateOfBirth">
+                        Date de naissance
+                      </Label>
+                      <Input
+                        id="create-dateOfBirth"
+                        type="date"
+                        value={createForm.dateOfBirth}
+                        onChange={(e) =>
+                          setCreateForm({
+                            ...createForm,
+                            dateOfBirth: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2 w-full">
+                      <Label htmlFor="create-gender">Genre</Label>
+                      <Select
+                        value={createForm.gender}
+                        onValueChange={(value) =>
+                          setCreateForm({ ...createForm, gender: value })
+                        }
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="M">Masculin</SelectItem>
+                          <SelectItem value="F">Féminin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsCreateDialogOpen(false)}
+              >
+                Annuler
+              </Button>
+              <Button onClick={handleCreateUser} disabled={isSubmitting}>
+                {isSubmitting ? "Création..." : "Créer"}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
-      {/* Stats */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Total utilisateurs</CardTitle>
+          <CardTitle className="text-sm font-medium">
+            Total utilisateurs
+          </CardTitle>
           <Shield className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
@@ -396,7 +507,6 @@ export default function AdminUsersPage() {
         </Select>
       </div>
 
-      {/* Users Table */}
       <Card>
         <CardContent className="pt-6">
           {filteredUsers.length === 0 ? (
@@ -412,22 +522,23 @@ export default function AdminUsersPage() {
                     <TableHead>Email</TableHead>
                     <TableHead>Rôle</TableHead>
                     <TableHead>Statut</TableHead>
-                    <TableHead>Créé le</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredUsers.map(user => (
+                  {filteredUsers.map((user) => (
                     <TableRow key={user.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Avatar className="h-8 w-8">
                             <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                              {getInitials(user.first_name, user.last_name)}
+                              {getInitials(user.firstName, user.lastName)}
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <p className="font-medium">{user.first_name} {user.last_name}</p>
+                            <p className="font-medium">
+                              {user.firstName} {user.lastName}
+                            </p>
                           </div>
                         </div>
                       </TableCell>
@@ -435,39 +546,22 @@ export default function AdminUsersPage() {
                         {user.email}
                       </TableCell>
                       <TableCell>
-                        <Select value={user.role} onValueChange={(newRole) => handleUpdateRole(user.id, newRole)}>
-                          <SelectTrigger className="w-32">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="student">Étudiant</SelectItem>
-                            <SelectItem value="teacher">Enseignant</SelectItem>
-                            <SelectItem value="admin">Admin</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        {getRoleBadge(user.role.toLowerCase())}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleToggleStatus(user.id, user.is_active)}
-                          className="gap-1"
-                        >
-                          {user.is_active ? (
+                        <div className="flex items-center gap-1">
+                          {user.enabled !== false ? (
                             <>
                               <CheckCircle className="h-4 w-4 text-green-600" />
-                              Actif
+                              <span className="text-sm">Actif</span>
                             </>
                           ) : (
                             <>
                               <XCircle className="h-4 w-4 text-red-600" />
-                              Inactif
+                              <span className="text-sm">Inactif</span>
                             </>
                           )}
-                        </Button>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {new Date(user.created_at).toLocaleDateString('fr-FR')}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
@@ -477,18 +571,19 @@ export default function AdminUsersPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem asChild>
-                              <Link href={`/admin/users/${user.id}/edit`}>
-                                <Edit className="mr-2 h-4 w-4" />
-                                Modifier
-                              </Link>
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              onClick={() => openEditDialog(user)}
+                            >
+                              <Edit className="mr-2 h-4 w-4" />
+                              Modifier
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-destructive cursor-pointer"
                               onClick={() => handleDeleteUser(user.id)}
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
-                              Supprimer
+                              Désactiver
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -501,6 +596,199 @@ export default function AdminUsersPage() {
           )}
         </CardContent>
       </Card>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
+            disabled={currentPage === 0}
+          >
+            Précédent
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Page {currentPage + 1} sur {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setCurrentPage((p) => Math.min(totalPages - 1, p + 1))
+            }
+            disabled={currentPage === totalPages - 1}
+          >
+            Suivant
+          </Button>
+        </div>
+      )}
+
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Modifier l'utilisateur</DialogTitle>
+            <DialogDescription>
+              Modifiez les informations de l'utilisateur
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-firstName">Prénom</Label>
+              <Input
+                id="edit-firstName"
+                value={editForm.firstName || ""}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, firstName: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-lastName">Nom</Label>
+              <Input
+                id="edit-lastName"
+                value={editForm.lastName || ""}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, lastName: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">Email</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={editForm.email || ""}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, email: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="space-y-2 flex flex-col md:flex-row md:space-x-4 md:space-y-0">
+              <div className="space-y-2 w-full">
+                <Label htmlFor="edit-role">Rôle</Label>
+                <Select
+                  value={editForm.role}
+                  onValueChange={(value: any) =>
+                    setEditForm({ ...editForm, role: value })
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="STUDENT">Étudiant</SelectItem>
+                    <SelectItem value="TEACHER">Enseignant</SelectItem>
+                    <SelectItem value="ADMIN">Administrateur</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {editForm.role === "STUDENT" && (
+                <div className="space-y-2 w-full">
+                  <Label htmlFor="edit-department">Département</Label>
+                  <Select
+                    value={editForm.departmentId?.toString() || ""}
+                    onValueChange={(value) =>
+                      setEditForm({
+                        ...editForm,
+                        departmentId: parseInt(value),
+                      })
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Sélectionnez un département" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {departments.map((dept) => (
+                        <SelectItem key={dept.id} value={dept.id.toString()}>
+                          {dept.name} ({dept.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            {editForm.role === "STUDENT" && (
+              <>
+                <div className="space-y-2 flex flex-col md:flex-row md:space-x-4 md:space-y-0">
+                  <div className="space-y-2 w-full">
+                    <Label htmlFor="edit-dateOfBirth">Date de naissance</Label>
+                    <Input
+                      id="edit-dateOfBirth"
+                      type="date"
+                      value={editForm.dateOfBirth || ""}
+                      onChange={(e) =>
+                        setEditForm({
+                          ...editForm,
+                          dateOfBirth: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2 w-full">
+                    <Label htmlFor="edit-gender">Genre</Label>
+                    <Select
+                      value={editForm.gender || ""}
+                      onValueChange={(value) =>
+                        setEditForm({ ...editForm, gender: value })
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="M">Masculin</SelectItem>
+                        <SelectItem value="F">Féminin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="edit-validated"
+                    checked={editForm.validated === true}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, validated: e.target.checked })
+                    }
+                    className="h-4 w-4"
+                  />
+                  <Label htmlFor="edit-validated">Étudiant validé</Label>
+                </div>
+              </>
+            )}
+
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="edit-enabled"
+                checked={editForm.enabled !== false}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, enabled: e.target.checked })
+                }
+                className="h-4 w-4"
+              />
+              <Label htmlFor="edit-enabled">Compte actif</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsEditDialogOpen(false)}
+            >
+              Annuler
+            </Button>
+            <Button onClick={handleEditUser} disabled={isSubmitting}>
+              {isSubmitting ? "Modification..." : "Modifier"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
-  )
+  );
 }

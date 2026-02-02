@@ -2,32 +2,27 @@ package com.campusmaster.campusmaster.application.dto;
 
 import java.sql.Date;
 
-import com.campusmaster.campusmaster.domain.model.user.Role;
-
+import jakarta.validation.constraints.Email;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Getter;
+import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
-@AllArgsConstructor
-@NoArgsConstructor
-@Getter
-@Setter
+@Data
 @Builder
-public class UserResponse {
-    private Long id;
+@NoArgsConstructor
+@AllArgsConstructor
+public class UpdateUserRequest {
+    @Email
+    private String email;
     private String firstName;
     private String lastName;
-    private String email;
-    private Role role;
     private Boolean enabled;
+    private String role;  // ADMIN, TEACHER, STUDENT
     
     // Champs spécifiques pour Student
     private Date dateOfBirth;
     private Long departmentId;
-    private String departmentName;
     private String gender;
     private Boolean validated;
-    private String ine;
 }
