@@ -2,20 +2,25 @@ package com.campusmaster.campusmaster.application.service;
 
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
 import com.campusmaster.campusmaster.application.dto.CourseResponse;
 import com.campusmaster.campusmaster.application.dto.CreateCourseRequest;
-import com.campusmaster.campusmaster.domain.model.course.Course;
-import com.campusmaster.campusmaster.domain.model.pedagogy.Semester;
-import com.campusmaster.campusmaster.domain.model.user.Student;
+import com.campusmaster.campusmaster.application.dto.UpdateCourseRequest;
+import com.campusmaster.campusmaster.domain.model.course.CourseStatus;
 
 public interface CourseService {
     CourseResponse createCourse(CreateCourseRequest request);
 
-    List<CourseResponse> getAllCourses(Student student);
+    CourseResponse updateCourse(Long id, UpdateCourseRequest request);
 
-    List<Course> getCoursesBySemester(Semester semester);
+    CourseResponse getCourseById(Long id);
 
-    List<Course> getCoursesByModule(Long moduleId);
+    Page<CourseResponse> getAllCourses(Long teacherId, Long departmentId, Long semesterId, 
+                                        CourseStatus status, Pageable pageable);
 
-    List<Course> getCoursesByTeacher(Long teacherId);
+    List<CourseResponse> getCoursesByTeacher(Long teacherId);
+
+    void deleteCourse(Long id);
 }

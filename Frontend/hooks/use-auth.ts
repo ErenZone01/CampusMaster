@@ -13,29 +13,85 @@ interface AuthState {
 }
 
 async function fetchCurrentUser(): Promise<UserPublic | null> {
+  console.log('[fetchCurrentUser] Called!')
+  
   if (typeof window !== 'undefined' && window.location.pathname.startsWith('/login')) {
+    console.log('[fetchCurrentUser] On login page, skipping')
     return null
   }
+  
+  // Check if token exists first
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+  if (!token) {
+    console.log('[fetchCurrentUser] No token found in localStorage')
+    return null
+  }
+  
+  console.log('[fetchCurrentUser] Token found (length: ' + token.length + '), fetching user data...')
+  
   try {
     const result = await AuthService.getCurrentUser()
-    return result.success ? result.data || null : null
+    console.log('[fetchCurrentUser] API response:', result)
+    
+    if (!result.success) {
+      // Token invalide, on le supprime
+      console.log('[fetchCurrentUser] API returned success=false, clearing token')
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+      }
+      return null
+    }
+    
+    console.log('[fetchCurrentUser] User authenticated successfully:', result.data)
+    return result.data || null
   } catch (error) {
+    // En cas d'erreur, on supprime le token
+    console.error('[fetchCurrentUser] Error fetching user:', error)
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+    }
     return null
   }
 }
 
 export function useAuth() {
   const router = useRouter()
+  
+  // Use token as part of SWR key to refetch when token changes
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+  const isLoginPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/login')
+  
+  // Don't use SWR on login page to avoid polluting the cache
+  const swrKey = token && !isLoginPage ? ['current-user', token] : null
+  
+  console.log('[useAuth] SWR setup:', { 
+    hasToken: !!token, 
+    tokenLength: token?.length,
+    swrKey: swrKey,
+    isLoginPage,
+    pathname: typeof window !== 'undefined' ? window.location.pathname : 'SSR'
+  })
+  
   const { data: user, error, isLoading, mutate } = useSWR<UserPublic | null>(
-    'current-user',
+    swrKey,
     fetchCurrentUser,
     {
       revalidateOnFocus: false,
       shouldRetryOnError: false,
-      dedupingInterval: 60000, // Cache for 1 minute
-      focusThrottleInterval: 300000, // 5 minutes
+      dedupingInterval: 5000,
+      focusThrottleInterval: 10000,
     }
   )
+
+  console.log('[useAuth] State:', { 
+    user, 
+    isLoading, 
+    token: !!token, 
+    isAuthenticated: !!user,
+    error: error?.message
+  })
 
   const signIn = useCallback(async (email: string, password: string) => {
     const result = await AuthService.login({ email, password })
@@ -103,17 +159,24 @@ export function useRequireAuth(allowedRoles?: UserRole[]) {
   const router = useRouter()
 
   useEffect(() => {
-    // Only check when loading is complete
-    if (isLoading) return
+    console.log('[useRequireAuth] Check:', { isLoading, isAuthenticated, user: !!user })
+    
+    // Wait for loading to complete
+    if (isLoading) {
+      console.log('[useRequireAuth] Still loading, waiting...')
+      return
+    }
 
     // Check authentication
     if (!isAuthenticated) {
+      console.log('[useRequireAuth] Not authenticated, redirecting to login')
       router.push('/login')
       return
     }
 
     // Check role authorization
     if (allowedRoles && user && !allowedRoles.includes(user.role)) {
+      console.log('[useRequireAuth] Role not allowed:', user.role, 'Required:', allowedRoles)
       const redirectPath = user.role === 'admin' 
         ? '/admin' 
         : user.role === 'teacher' 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { AuthService, CourseService, EnrollmentService, UserService, DepartmentService } from '@/lib/mock'
+import { CourseApi, EnrollmentApi, type CourseResponse, type EnrollmentResponse } from '@/lib/api/services'
 import { CourseCard } from '@/components/courses/course-card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -25,34 +25,14 @@ import {
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 
-interface Course {
-  id: string
-  code: string
-  name: string
-  description: string | null
-  credits: number
-  status: string
-  cover_image: string | null
-  teacher: {
-    first_name: string
-    last_name: string
-  }
-  department: {
-    name: string
-    code: string
-  }
-  enrollment_count: number
-  is_enrolled: boolean
-}
-
 export default function StudentCoursesPage() {
-  const [courses, setEnrolledCourses] = useState<Course[]>([])
-  const [availableCourses, setAvailableCourses] = useState<Course[]>([])
+  const [enrolledCourses, setEnrolledCourses] = useState<CourseResponse[]>([])
+  const [availableCourses, setAvailableCourses] = useState<CourseResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [departmentFilter, setDepartmentFilter] = useState<string>('all')
   const [showEnrollDialog, setShowEnrollDialog] = useState(false)
-  const [enrolling, setEnrolling] = useState<string | null>(null)
+  const [enrolling, setEnrolling] = useState<number | null>(null)
 
   useEffect(() => {
     fetchCourses()
@@ -60,93 +40,40 @@ export default function StudentCoursesPage() {
 
   async function fetchCourses() {
     try {
-      const currentUserResponse = await AuthService.getCurrentUser()
-      if (!currentUserResponse?.data) return
-      const currentUser = currentUserResponse.data
+      // Get my enrollments
+      const enrollments = await EnrollmentApi.getMyEnrollments()
+      const enrolledCourseIds = enrollments.map(e => e.courseId)
 
-      // Get enrolled courses
-      const enrollmentsResponse = await EnrollmentService.getEnrollmentsByStudent(currentUser.id)
-      const enrollments = enrollmentsResponse.data || []
-      const activeEnrollments = enrollments.filter((e: any) => e.status === 'active')
-
-      // Enrich enrolled courses
-      const enrichedEnrolled = await Promise.all(
-        activeEnrollments.map(async (enrollment: any) => {
-          const courseResponse = await CourseService.getCourseById(enrollment.course_id)
-          const course = courseResponse.data
-          if (!course) return null
-
-          const teacherResponse = await UserService.getUserById(course.teacher_id)
-          const teacher = teacherResponse.data
-
-          const deptResponse = await DepartmentService.getDepartmentById(course.department_id)
-          const dept = deptResponse.data
-
-          return {
-            ...course,
-            teacher: teacher ? { first_name: teacher.first_name || '', last_name: teacher.last_name || '' } : { first_name: '', last_name: '' },
-            department: dept ? { name: dept.name, code: dept.code } : { name: '', code: '' },
-            is_enrolled: true,
-          }
-        })
+      // Get enrolled courses details
+      const enrolledCoursesData = await Promise.all(
+        enrolledCourseIds.map(id => CourseApi.getCourseById(id))
       )
-      const enrolledCourses = enrichedEnrolled.filter((c): c is Course => c !== null)
-      setEnrolledCourses(enrolledCourses)
+      setEnrolledCourses(enrolledCoursesData)
 
-      // Get available courses for enrollment
-      const allCoursesResponse = await CourseService.getCourses({})
-      const allCoursesData = Array.isArray(allCoursesResponse.data) 
-        ? allCoursesResponse.data 
-        : (allCoursesResponse.data as any)?.items || []
-      const enrolledIds = enrolledCourses.map((c: Course) => c.id)
-      const availableCourses = allCoursesData.filter((c: any) => 
-        c.status === 'published' && !enrolledIds.includes(c.id)
+      // Get all published courses
+      const allCoursesResponse = await CourseApi.getAllCourses({ status: 'PUBLISHED' })
+      const availableCoursesData = allCoursesResponse.content.filter(
+        course => !enrolledCourseIds.includes(course.id)
       )
-
-      // Enrich available courses
-      const enrichedAvailable = await Promise.all(
-        availableCourses.map(async (course: any) => {
-          const teacherResponse = await UserService.getUserById(course.teacher_id)
-          const teacher = teacherResponse.data
-
-          const deptResponse = await DepartmentService.getDepartmentById(course.department_id)
-          const dept = deptResponse.data
-
-          return {
-            ...course,
-            teacher: teacher ? { first_name: teacher.first_name || '', last_name: teacher.last_name || '' } : { first_name: '', last_name: '' },
-            department: dept ? { name: dept.name, code: dept.code } : { name: '', code: '' },
-            is_enrolled: false,
-          }
-        })
-      )
-
-      setAvailableCourses(enrichedAvailable)
+      setAvailableCourses(availableCoursesData)
     } catch (error) {
       console.error('Error fetching courses:', error)
+      toast.error('Erreur lors du chargement des cours')
     } finally {
       setLoading(false)
     }
   }
 
-  async function handleEnroll(courseId: string) {
+  async function handleEnroll(courseId: number) {
     setEnrolling(courseId)
     try {
-      const currentUserResponse = await AuthService.getCurrentUser()
-      if (!currentUserResponse?.data) throw new Error('Non authentifié')
-      const currentUser = currentUserResponse.data
-
-      await EnrollmentService.createEnrollment({
-        student_id: currentUser.id,
-        course_id: courseId,
-        status: 'active',
-      })
-
-      // Show success toast if available
+      await EnrollmentApi.enrollInCourse(courseId)
+      toast.success('Inscription réussie !')
       fetchCourses()
       setShowEnrollDialog(false)
     } catch (error: any) {
       console.error('Erreur lors de l\'inscription:', error)
+      toast.error(error.response?.data?.message || 'Erreur lors de l\'inscription')
     } finally {
       setEnrolling(null)
     }
@@ -225,22 +152,22 @@ export default function StudentCoursesPage() {
               {filteredAvailable.length === 0 ? (
                 <div className="py-8 text-center text-muted-foreground">
                   Aucun cours disponible
-                </div>
-              ) : (
-                filteredAvailable.map(course => (
-                  <div
-                    key={course.id}
-                    className="flex items-center justify-between rounded-lg border p-4 hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline">{course.code}</Badge>
-                        <span className="font-medium">{course.name}</span>
+                </div>enrolledCourses.filter(course => {
+    const matchesSearch = 
+      course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      course.code.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesDepartment = departmentFilter === 'all' || course.departmentName === departmentFilter
+    return matchesSearch && matchesDepartment
+  })
+
+  const filteredAvailable = availableCourses.filter(course => {
+    const matchesSearch = 
+      course.title.toLowerCase().includes(searchQuery.toLowerCtitle}</span>
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        {course.teacher?.first_name} {course.teacher?.last_name} • {course.credits} crédits
-                      </p>
-                    </div>
+                        {course.teacherN
+
+  const departments = [...new Set(enrolledCourses.map(c => c.departmentNam
                     <Button
                       size="sm"
                       onClick={() => handleEnroll(course.id)}
@@ -265,7 +192,7 @@ export default function StudentCoursesPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
-          />
+          />enrolledCourses.length} cours inscrit{enrolledC
         </div>
         <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
           <SelectTrigger className="w-full sm:w-48">
@@ -297,14 +224,14 @@ export default function StudentCoursesPage() {
           {filteredCourses.map(course => (
             <CourseCard
               key={course.id}
-              id={course.id}
+              id={String(course.id)}
               code={course.code}
-              name={course.name}
-              teacherName={`${course.teacher?.first_name || ''} ${course.teacher?.last_name || ''}`.trim()}
-              status={course.status as any}
+              name={course.title}
+              teacherName={course.teacherName}
+              status={course.status.toLowerCase() as any}
               progress={0}
               href={`/student/courses/${course.id}`}
-              coverImage={course.cover_image}
+              coverImage={course.coverImage}
             />
           ))}
         </div>

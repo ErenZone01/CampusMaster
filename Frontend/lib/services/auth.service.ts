@@ -7,13 +7,14 @@ export const AuthService = USE_MOCK ? MockAuthService : {
   async login(credentials: { email: string; password: string }) {
     try {
       const response = await AuthApi.login(credentials)
+      const role = response.user.role.toLowerCase() as any
       return {
         success: true,
         data: {
           email: response.user.email,
           firstName: response.user.firstName,
           lastName: response.user.lastName,
-          role: response.user.role.toLowerCase() as any,
+          role: role,
           first_name: response.user.firstName,
           last_name: response.user.lastName,
           id: response.user.email,

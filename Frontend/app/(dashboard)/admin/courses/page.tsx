@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CourseService, DepartmentService, SemesterService, UserService } from "@/lib/mock";
+import { CourseApi, DepartmentApi, SemesterApi, UserApi, type CourseResponse } from "@/lib/api/services";
 import { useRequireAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,49 +59,33 @@ import {
   MoreVertical,
 } from "lucide-react";
 
-interface Course {
-  id: string;
-  code: string;
-  name: string;
-  description: string | null;
-  department_id: string;
-  teacher_id: string;
-  semester_id: string;
-  credits: number;
-  status: string;
-  max_students: number | null;
-  schedule_info: string | null;
-  cover_image: string | null;
-  created_at: string;
-}
+type Course = CourseResponse
 
 interface CourseForm {
   code: string;
-  name: string;
+  title: string;
   description: string;
-  department_id: string;
-  teacher_id: string;
-  semester_id: string;
+  departmentId: number;
+  teacherId: number;
+  semesterId: number;
   credits: number;
   status: string;
-  max_students: number | null;
-  schedule_info: string;
-  cover_image: string;
+  maxStudents: number | null;
 }
 
 interface Teacher {
-  id: string;
-  first_name: string;
-  last_name: string;
+  id: number;
+  firstName: string;
+  lastName: string;
 }
 
 interface Semester {
-  id: string;
+  id: number;
   name: string;
 }
 
 interface Department {
-  id: string;
+  id: number;
   name: string;
 }
 
@@ -123,16 +107,14 @@ export default function AdminCoursesPage() {
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [formData, setFormData] = useState<CourseForm>({
     code: "",
-    name: "",
+    title: "",
     description: "",
-    department_id: "",
-    teacher_id: "",
-    semester_id: "",
+    departmentId: 0,
+    teacherId: 0,
+    semesterId: 0,
     credits: 3,
-    status: "draft",
-    max_students: null,
-    schedule_info: "",
-    cover_image: "",
+    status: "DRAFT",
+    maxStudents: null,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -141,24 +123,25 @@ export default function AdminCoursesPage() {
     if (showLoader) setIsLoading(true);
     else setIsRefetching(true);
     try {
-      const [coursesRes, teachersRes, semestersRes, departmentsRes] =
+      const [coursesRes, usersRes, semestersData, departmentsData] =
         await Promise.all([
-          CourseService.getCourses(),
-          UserService.getUsers(),
-          SemesterService.getSemesters(),
-          DepartmentService.getDepartments(),
+          CourseApi.getAllCourses(),
+          UserApi.getUsers(),
+          SemesterApi.getSemesters(),
+          DepartmentApi.getDepartments(),
         ]);
 
-      if (!coursesRes.success || !coursesRes.data) throw new Error(coursesRes.error);
-      if (!teachersRes.success || !teachersRes.data) throw new Error(teachersRes.error);
-      if (!semestersRes.success || !semestersRes.data) throw new Error(semestersRes.error);
-      if (!departmentsRes.success || !departmentsRes.data) throw new Error(departmentsRes.error);
-
-      setCourses(coursesRes.data.data as any);
-      const teachersFiltered = (teachersRes.data.data as any[]).filter((u: any) => u.role === 'teacher');
-      setTeachers(teachersFiltered.map((t: any) => ({ id: t.id, first_name: t.first_name, last_name: t.last_name })));
-      setSemesters(semestersRes.data.map((s: any) => ({ id: s.id, name: s.name })));
-      setDepartments(departmentsRes.data.map((d: any) => ({ id: d.id, name: d.name })));
+      setCourses(coursesRes.content);
+      
+      const teachersFiltered = usersRes.content.filter((u: any) => u.role === 'TEACHER');
+      setTeachers(teachersFiltered.map((t: any) => ({ 
+        id: t.id, 
+        firstName: t.firstName, 
+        lastName: t.lastName 
+      })));
+      
+      setSemesters(semestersData.map((s: any) => ({ id: s.id, name: s.name })));
+      setDepartments(departmentsData.map((d: any) => ({ id: d.id, name: d.name })));
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({
@@ -176,16 +159,14 @@ export default function AdminCoursesPage() {
   const resetForm = () => {
     setFormData({
       code: "",
-      name: "",
+      title: "",
       description: "",
-      department_id: "",
-      teacher_id: "",
-      semester_id: "",
+      departmentId: 0,
+      teacherId: 0,
+      semesterId: 0,
       credits: 3,
-      status: "draft",
-      max_students: null,
-      schedule_info: "",
-      cover_image: "",
+      status: "DRAFT",
+      maxStudents: null,
     });
   };
 
@@ -193,10 +174,10 @@ export default function AdminCoursesPage() {
   const handleCreateCourse = async () => {
     if (
       !formData.code.trim() ||
-      !formData.name.trim() ||
-      !formData.department_id ||
-      !formData.teacher_id ||
-      !formData.semester_id
+      !formData.title.trim() ||
+      !formData.departmentId ||
+      !formData.teacherId ||
+      !formData.semesterId
     ) {
       toast({
         title: "Erreur",
@@ -208,45 +189,29 @@ export default function AdminCoursesPage() {
 
     setIsSubmitting(true);
     try {
-      const result = await CourseService.createCourse({
+      await CourseApi.createCourse({
         code: formData.code.toUpperCase(),
-        name: formData.name,
+        title: formData.title,
         description: formData.description || '',
-        department_id: formData.department_id,
-        teacher_id: formData.teacher_id,
-        semester_id: formData.semester_id,
+        departmentId: formData.departmentId,
+        teacherId: formData.teacherId,
+        semesterId: formData.semesterId,
         credits: formData.credits,
-        status: formData.status as any,
-        max_students: formData.max_students || null,
-        schedule_info: formData.schedule_info || null,
-        cover_image: formData.cover_image || null,
+        maxStudents: formData.maxStudents || undefined,
       });
 
-      if (!result.success) {
-        if (result.error?.includes('existe déjà')) {
-          toast({
-            title: "Erreur",
-            description: "Ce code de module existe déjà",
-            variant: "destructive",
-          });
-        } else {
-          throw new Error(result.error);
-        }
-      } else {
-        toast({
-          title: "Succès",
-          description: "Module créé avec succès",
-          variant: "success",
-        });
-        resetForm();
-        setIsCreateDialogOpen(false);
-        await fetchData(false);
-      }
-    } catch (error) {
+      toast({
+        title: "Succès",
+        description: "Cours créé avec succès",
+      });
+      resetForm();
+      setIsCreateDialogOpen(false);
+      await fetchData(false);
+    } catch (error: any) {
       console.error("Error creating course:", error);
       toast({
         title: "Erreur",
-        description: "Impossible de créer le module",
+        description: error.response?.data?.message || "Impossible de créer le cours",
         variant: "destructive",
       });
     } finally {
@@ -259,10 +224,10 @@ export default function AdminCoursesPage() {
     if (
       !editingCourse ||
       !formData.code.trim() ||
-      !formData.name.trim() ||
-      !formData.department_id ||
-      !formData.teacher_id ||
-      !formData.semester_id
+      !formData.title.trim() ||
+      !formData.departmentId ||
+      !formData.teacherId ||
+      !formData.semesterId
     ) {
       toast({
         title: "Erreur",
@@ -274,46 +239,31 @@ export default function AdminCoursesPage() {
 
     setIsSubmitting(true);
     try {
-      const result = await CourseService.updateCourse(editingCourse.id, {
+      await CourseApi.updateCourse(editingCourse.id, {
         code: formData.code.toUpperCase(),
-        name: formData.name,
+        title: formData.title,
         description: formData.description || '',
-        department_id: formData.department_id,
-        teacher_id: formData.teacher_id,
-        semester_id: formData.semester_id,
+        departmentId: formData.departmentId,
+        teacherId: formData.teacherId,
+        semesterId: formData.semesterId,
         credits: formData.credits,
         status: formData.status as any,
-        max_students: formData.max_students || null,
-        schedule_info: formData.schedule_info || null,
-        cover_image: formData.cover_image || null,
+        maxStudents: formData.maxStudents || undefined,
       });
 
-      if (!result.success) {
-        if (result.error?.includes('existe déjà')) {
-          toast({
-            title: "Erreur",
-            description: "Ce code de module existe déjà",
-            variant: "destructive",
-          });
-        } else {
-          throw new Error(result.error);
-        }
-      } else {
-        toast({
-          title: "Succès",
-          description: "Module mis à jour avec succès",
-          variant: "success",
-        });
-        resetForm();
-        setIsEditDialogOpen(false);
-        setEditingCourse(null);
-        await fetchData(false);
-      }
-    } catch (error) {
+      toast({
+        title: "Succès",
+        description: "Cours mis à jour avec succès",
+      });
+      resetForm();
+      setIsEditDialogOpen(false);
+      setEditingCourse(null);
+      await fetchData(false);
+    } catch (error: any) {
       console.error("Error updating course:", error);
       toast({
         title: "Erreur",
-        description: "Impossible de mettre à jour le module",
+        description: error.response?.data?.message || "Impossible de mettre à jour le cours",
         variant: "destructive",
       });
     } finally {
@@ -322,23 +272,20 @@ export default function AdminCoursesPage() {
   };
 
   // Handle delete course
-  const handleDeleteCourse = async (id: string) => {
+  const handleDeleteCourse = async (id: number) => {
     try {
-      const result = await CourseService.deleteCourse(id);
-
-      if (!result.success) throw new Error(result.error);
+      await CourseApi.deleteCourse(id);
 
       toast({
         title: "Succès",
-        description: "Module supprimé avec succès",
-        variant: "success",
+        description: "Cours supprimé avec succès",
       });
       await fetchData(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting course:", error);
       toast({
         title: "Erreur",
-        description: "Impossible de supprimer le module",
+        description: error.response?.data?.message || "Impossible de supprimer le cours",
         variant: "destructive",
       });
     }
@@ -349,34 +296,32 @@ export default function AdminCoursesPage() {
     setEditingCourse(course);
     setFormData({
       code: course.code,
-      name: course.name,
+      title: course.title,
       description: course.description || "",
-      department_id: course.department_id,
-      teacher_id: course.teacher_id,
-      semester_id: course.semester_id,
+      departmentId: course.departmentId,
+      teacherId: course.teacherId,
+      semesterId: course.semesterId,
       credits: course.credits,
       status: course.status,
-      max_students: course.max_students,
-      schedule_info: course.schedule_info || "",
-      cover_image: course.cover_image || "",
+      maxStudents: course.maxStudents,
     });
     setIsEditDialogOpen(true);
   };
 
   // Get teacher name
-  const getTeacherName = (teacherId: string) => {
+  const getTeacherName = (teacherId: number) => {
     const teacher = teachers.find((t) => t.id === teacherId);
-    return teacher ? `${teacher.first_name} ${teacher.last_name}` : "Inconnu";
+    return teacher ? `${teacher.firstName} ${teacher.lastName}` : "Inconnu";
   };
 
   // Get semester name
-  const getSemesterName = (semesterId: string) => {
+  const getSemesterName = (semesterId: number) => {
     const semester = semesters.find((s) => s.id === semesterId);
     return semester?.name || "Inconnu";
   };
 
   // Get department name
-  const getDepartmentName = (departmentId: string) => {
+  const getDepartmentName = (departmentId: number) => {
     const department = departments.find((d) => d.id === departmentId);
     return department?.name || "Inconnu";
   };
@@ -390,7 +335,7 @@ export default function AdminCoursesPage() {
   const filteredCourses = courses.filter(
     (course) =>
       course.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      course.name.toLowerCase().includes(searchQuery.toLowerCase()),
+      course.title.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   if (isLoading) {
@@ -473,9 +418,9 @@ export default function AdminCoursesPage() {
                 <Input
                   id="create-name"
                   placeholder="ex: Introduction à l'informatique"
-                  value={formData.name}
+                  value={formData.title}
                   onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
+                    setFormData({ ...formData, title: e.target.value })
                   }
                 />
               </div>
@@ -494,9 +439,9 @@ export default function AdminCoursesPage() {
                 <div>
                   <Label htmlFor="create-department">Département *</Label>
                   <Select
-                    value={formData.department_id}
+                    value={String(formData.departmentId || '')}
                     onValueChange={(value) =>
-                      setFormData({ ...formData, department_id: value })
+                      setFormData({ ...formData, departmentId: parseInt(value) })
                     }
                   >
                     <SelectTrigger id="create-department" className="w-full">
@@ -504,7 +449,7 @@ export default function AdminCoursesPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {departments.map((department) => (
-                        <SelectItem key={department.id} value={department.id}>
+                        <SelectItem key={department.id} value={String(department.id)}>
                           {department.name}
                         </SelectItem>
                       ))}
@@ -514,9 +459,9 @@ export default function AdminCoursesPage() {
                 <div>
                   <Label htmlFor="create-semester">Semestre *</Label>
                   <Select
-                    value={formData.semester_id}
+                    value={String(formData.semesterId || '')}
                     onValueChange={(value) =>
-                      setFormData({ ...formData, semester_id: value })
+                      setFormData({ ...formData, semesterId: parseInt(value) })
                     }
                   >
                     <SelectTrigger id="create-semester" className="w-full">
@@ -524,7 +469,7 @@ export default function AdminCoursesPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {semesters.map((semester) => (
-                        <SelectItem key={semester.id} value={semester.id}>
+                        <SelectItem key={semester.id} value={String(semester.id)}>
                           {semester.name}
                         </SelectItem>
                       ))}
@@ -540,45 +485,21 @@ export default function AdminCoursesPage() {
                     type="number"
                     min="1"
                     placeholder="ex: 30"
-                    value={formData.max_students || ""}
+                    value={formData.maxStudents || ""}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        max_students: e.target.value ? parseInt(e.target.value) : null,
+                        maxStudents: e.target.value ? parseInt(e.target.value) : null,
                       })
                     }
                   />
                 </div>
                 <div>
-                  <Label htmlFor="create-schedule">Horaire</Label>
-                  <Input
-                    id="create-schedule"
-                    placeholder="ex: Lun 10h-12h"
-                    value={formData.schedule_info}
-                    onChange={(e) =>
-                      setFormData({ ...formData, schedule_info: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="create-cover-image">Image de couverture (URL)</Label>
-                <Input
-                  id="create-cover-image"
-                  placeholder="https://example.com/image.jpg"
-                  value={formData.cover_image}
-                  onChange={(e) =>
-                    setFormData({ ...formData, cover_image: e.target.value })
-                  }
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
                   <Label htmlFor="create-teacher">Enseignant *</Label>
                   <Select
-                    value={formData.teacher_id}
+                    value={String(formData.teacherId || '')}
                     onValueChange={(value) =>
-                      setFormData({ ...formData, teacher_id: value })
+                      setFormData({ ...formData, teacherId: parseInt(value) })
                     }
                   >
                     <SelectTrigger id="create-teacher" className="w-full">
@@ -586,32 +507,32 @@ export default function AdminCoursesPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {teachers.map((teacher) => (
-                        <SelectItem key={teacher.id} value={teacher.id}>
-                          {teacher.first_name} {teacher.last_name}
+                        <SelectItem key={teacher.id} value={String(teacher.id)}>
+                          {teacher.firstName} {teacher.lastName}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label htmlFor="create-status">Statut</Label>
-                  <Select
-                    value={formData.status}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, status: value })
-                    }
-                  >
-                    <SelectTrigger id="create-status" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="draft">Brouillon</SelectItem>
-                      <SelectItem value="published">Publié</SelectItem>
-                      <SelectItem value="archived">Archivé</SelectItem>
+              </div>
+              <div>
+                <Label htmlFor="create-status">Statut</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, status: value })
+                  }
+                >
+                  <SelectTrigger id="create-status" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="DRAFT">Brouillon</SelectItem>
+                    <SelectItem value="PUBLISHED">Publié</SelectItem>
+                    <SelectItem value="ARCHIVED">Archivé</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
               <Button
                 onClick={handleCreateCourse}
                 disabled={isSubmitting}
@@ -672,7 +593,6 @@ export default function AdminCoursesPage() {
                     <TableHead>Statut</TableHead>
                     <TableHead className="text-center">Crédits</TableHead>
                     <TableHead className="text-center">Max Étudiants</TableHead>
-                    <TableHead>Horaire</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -683,30 +603,30 @@ export default function AdminCoursesPage() {
                         <Badge variant="outline">{course.code}</Badge>
                       </TableCell>
                       <TableCell className="font-semibold">
-                        {course.name}
+                        {course.title}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {getSemesterName(course.semester_id)}
+                        {getSemesterName(course.semesterId)}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {getDepartmentName(course.department_id)}
+                        {getDepartmentName(course.departmentId)}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {getTeacherName(course.teacher_id)}
+                        {getTeacherName(course.teacherId)}
                       </TableCell>
                       <TableCell>
                         <Badge
                           variant={
-                            course.status === "published"
+                            course.status === "PUBLISHED"
                               ? "default"
-                              : course.status === "draft"
+                              : course.status === "DRAFT"
                                 ? "secondary"
                                 : "outline"
                           }
                         >
-                          {course.status === "published"
+                          {course.status === "PUBLISHED"
                             ? "Publié"
-                            : course.status === "draft"
+                            : course.status === "DRAFT"
                               ? "Brouillon"
                               : "Archivé"}
                         </Badge>
@@ -715,10 +635,7 @@ export default function AdminCoursesPage() {
                         {course.credits}
                       </TableCell>
                       <TableCell className="text-sm text-center">
-                        {course.max_students || "-"}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {course.schedule_info || "-"}
+                        {course.maxStudents || "-"}
                       </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
@@ -753,7 +670,7 @@ export default function AdminCoursesPage() {
                                     </AlertDialogTitle>
                                     <AlertDialogDescription>
                                       Cette action supprimera définitivement le
-                                      module "{course.name}".
+                                      cours "{course.title}".
                                     </AlertDialogDescription>
                                   </AlertDialogHeader>
                                   <div className="flex gap-2 justify-end">
@@ -826,9 +743,9 @@ export default function AdminCoursesPage() {
               <Label htmlFor="edit-name">Nom *</Label>
               <Input
                 id="edit-name"
-                value={formData.name}
+                value={formData.title}
                 onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
+                  setFormData({ ...formData, title: e.target.value })
                 }
               />
             </div>
@@ -846,9 +763,9 @@ export default function AdminCoursesPage() {
               <div>
                 <Label htmlFor="edit-department">Département *</Label>
                 <Select
-                  value={formData.department_id}
+                  value={String(formData.departmentId || '')}
                   onValueChange={(value) =>
-                    setFormData({ ...formData, department_id: value })
+                    setFormData({ ...formData, departmentId: parseInt(value) })
                   }
                 >
                   <SelectTrigger id="edit-department" className="w-full">
@@ -856,7 +773,7 @@ export default function AdminCoursesPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {departments.map((department) => (
-                      <SelectItem key={department.id} value={department.id}>
+                      <SelectItem key={department.id} value={String(department.id)}>
                         {department.name}
                       </SelectItem>
                     ))}
@@ -866,9 +783,9 @@ export default function AdminCoursesPage() {
               <div>
                 <Label htmlFor="edit-semester">Semestre *</Label>
                 <Select
-                  value={formData.semester_id}
+                  value={String(formData.semesterId || '')}
                   onValueChange={(value) =>
-                    setFormData({ ...formData, semester_id: value })
+                    setFormData({ ...formData, semesterId: parseInt(value) })
                   }
                 >
                   <SelectTrigger id="edit-semester" className="w-full">
@@ -876,7 +793,7 @@ export default function AdminCoursesPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {semesters.map((semester) => (
-                      <SelectItem key={semester.id} value={semester.id}>
+                      <SelectItem key={semester.id} value={String(semester.id)}>
                         {semester.name}
                       </SelectItem>
                     ))}
@@ -884,43 +801,19 @@ export default function AdminCoursesPage() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="edit-max-students">Nombre d'étudiants</Label>
-                <Input
-                  id="edit-max-students"
-                  type="number"
-                  min="1"
-                  placeholder="ex: 30"
-                  value={formData.max_students || ""}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      max_students: e.target.value ? parseInt(e.target.value) : null,
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <Label htmlFor="edit-schedule">Horaire</Label>
-                <Input
-                  id="edit-schedule"
-                  placeholder="ex: Lun 10h-12h"
-                  value={formData.schedule_info}
-                  onChange={(e) =>
-                    setFormData({ ...formData, schedule_info: e.target.value })
-                  }
-                />
-              </div>
-            </div>
             <div>
-              <Label htmlFor="edit-cover-image">Image de couverture (URL)</Label>
+              <Label htmlFor="edit-max-students">Nombre d'étudiants max</Label>
               <Input
-                id="edit-cover-image"
-                placeholder="https://example.com/image.jpg"
-                value={formData.cover_image}
+                id="edit-max-students"
+                type="number"
+                min="1"
+                placeholder="ex: 30"
+                value={formData.maxStudents || ""}
                 onChange={(e) =>
-                  setFormData({ ...formData, cover_image: e.target.value })
+                  setFormData({
+                    ...formData,
+                    maxStudents: e.target.value ? parseInt(e.target.value) : null,
+                  })
                 }
               />
             </div>
@@ -928,9 +821,9 @@ export default function AdminCoursesPage() {
               <div>
                 <Label htmlFor="edit-teacher">Enseignant *</Label>
                 <Select
-                  value={formData.teacher_id}
+                  value={String(formData.teacherId || '')}
                   onValueChange={(value) =>
-                    setFormData({ ...formData, teacher_id: value })
+                    setFormData({ ...formData, teacherId: parseInt(value) })
                   }
                 >
                   <SelectTrigger id="edit-teacher" className="w-full">
@@ -938,32 +831,32 @@ export default function AdminCoursesPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {teachers.map((teacher) => (
-                      <SelectItem key={teacher.id} value={teacher.id}>
-                        {teacher.first_name} {teacher.last_name}
+                      <SelectItem key={teacher.id} value={String(teacher.id)}>
+                        {teacher.firstName} {teacher.lastName}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label htmlFor="edit-status">Statut</Label>
-                <Select
-                  value={formData.status}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, status: value })
-                  }
-                >
-                  <SelectTrigger id="edit-status" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="draft">Brouillon</SelectItem>
-                    <SelectItem value="published">Publié</SelectItem>
-                    <SelectItem value="archived">Archivé</SelectItem>
+            </div>
+            <div>
+              <Label htmlFor="edit-status">Statut</Label>
+              <Select
+                value={formData.status}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, status: value })
+                }
+              >
+                <SelectTrigger id="edit-status" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="DRAFT">Brouillon</SelectItem>
+                  <SelectItem value="PUBLISHED">Publié</SelectItem>
+                  <SelectItem value="ARCHIVED">Archivé</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-            </div>
             <Button
               onClick={handleUpdateCourse}
               disabled={isSubmitting}
