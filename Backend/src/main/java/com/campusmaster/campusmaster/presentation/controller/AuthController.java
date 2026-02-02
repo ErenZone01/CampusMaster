@@ -67,9 +67,11 @@ public class AuthController {
             return ResponseEntity.status(401).build();
         }
         UserResponse response = UserResponse.builder()
+                .id(user.getId())
                 .email(user.getEmail())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
+                .avatarUrl(user.getAvatarUrl())
                 .role(user.getRole())
                 .build();
         return ResponseEntity.ok(response);

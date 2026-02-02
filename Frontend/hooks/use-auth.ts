@@ -155,7 +155,7 @@ export function useAuth() {
 
 // Hook to require authentication
 export function useRequireAuth(allowedRoles?: UserRole[]) {
-  const { user, isLoading, isAuthenticated } = useAuth()
+  const { user, isLoading, isAuthenticated, refreshUser } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
@@ -186,7 +186,7 @@ export function useRequireAuth(allowedRoles?: UserRole[]) {
     }
   }, [isLoading, isAuthenticated, user?.role, allowedRoles, router])
 
-  return { user, isLoading, isAuthenticated }
+  return { user, isLoading, isAuthenticated, refreshUser }
 }
 
 // Hook to get redirect path based on user role

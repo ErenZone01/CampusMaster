@@ -40,6 +40,9 @@ public abstract class User {
     @Column(nullable = false)
     private String password;
 
+    @Column(nullable = true)
+    private String avatarUrl;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Role role;

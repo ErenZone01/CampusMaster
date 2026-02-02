@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRequireAuth } from '@/hooks/use-auth'
-import { AuthService, UserService, CourseService } from '@/lib/mock'
+import { UserApi, CourseApi } from '@/lib/api/services'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,18 +13,18 @@ import { useToast } from '@/hooks/use-toast'
 import { Edit, Save, X, Users, BookOpen, Shield, Upload } from 'lucide-react'
 
 interface AdminProfile {
-  id: string
-  full_name: string
+  id: string | number
+  firstName: string
+  lastName: string
   email: string
-  phone: string
-  bio: string
-  avatar_url: string
-  users_count: number
-  courses_count: number
+  role: string
+  avatarUrl?: string
+  usersCount: number
+  coursesCount: number
 }
 
 export default function AdminProfilePage() {
-  useRequireAuth(['admin'])
+  const { user, isLoading: authLoading, refreshUser } = useRequireAuth(['admin'])
 
   const [profile, setProfile] = useState<AdminProfile | null>(null)
   const [editingProfile, setEditingProfile] = useState<AdminProfile | null>(null)
@@ -35,33 +35,30 @@ export default function AdminProfilePage() {
   const { toast } = useToast()
 
   useEffect(() => {
-    fetchProfile()
-  }, [])
+    if (!authLoading && user) {
+      fetchProfile()
+    }
+  }, [authLoading, user])
 
   const fetchProfile = async () => {
+    if (!user) return
+
     try {
-      const currentUserResult = await AuthService.getCurrentUser()
-      if (!currentUserResult.success || !currentUserResult.data) return
-
-      const currentUser = currentUserResult.data
-      const result = await UserService.getUserById(currentUser.id)
-      if (!result.success || !result.data) throw new Error(result.error)
-
-      const profileData = result.data
-
       // Count users and courses
-      const usersResult = await UserService.getUsers()
-      const coursesResult = await CourseService.getCourses()
+      const [usersResult, coursesResult] = await Promise.all([
+        UserApi.getUsers(),
+        CourseApi.getAllCourses()
+      ])
 
       const adminProfile: AdminProfile = {
-        id: profileData.id,
-        full_name: `${profileData.first_name} ${profileData.last_name}`,
-        email: profileData.email,
-        phone: '',
-        bio: '',
-        avatar_url: profileData.avatar_url || '',
-        users_count: usersResult.data?.data?.length || 0,
-        courses_count: coursesResult.data?.data?.length || 0,
+        id: user.id, // Use the numeric ID from user
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        role: user.role,
+        avatarUrl: user.avatarUrl || '',
+        usersCount: usersResult.totalElements || 0,
+        coursesCount: coursesResult.totalElements || 0,
       }
 
       setProfile(adminProfile)
@@ -78,28 +75,25 @@ export default function AdminProfilePage() {
   }
 
   const handleSaveProfile = async () => {
-    if (!editingProfile) return
+    if (!editingProfile || !user) return
 
     setSaving(true)
     try {
-      const result = await UserService.updateUser(editingProfile.id, {
-        first_name: editingProfile.full_name.split(' ')[0],
-        last_name: editingProfile.full_name.split(' ').slice(1).join(' '),
-        avatar_url: editingProfile.avatar_url,
+      // Use numeric ID for update
+      await UserApi.updateUser(String(user.id), {
+        firstName: editingProfile.firstName,
+        lastName: editingProfile.lastName,
       })
-
-      if (!result.success) throw new Error(result.error)
 
       setProfile({ ...profile!, ...editingProfile })
       setIsEditing(false)
       toast({
         description: 'Profil mis à jour avec succès',
-        variant: 'success',
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving profile:', error)
       toast({
-        description: 'Erreur lors de la mise à jour du profil',
+        description: error.response?.data?.message || 'Erreur lors de la mise à jour du profil',
         variant: 'destructive',
       })
     } finally {
@@ -109,18 +103,36 @@ export default function AdminProfilePage() {
 
   const handleUploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file || !editingProfile) return
+    if (!file || !editingProfile || !user) return
+
+    // Validate file type and size
+    if (!file.type.startsWith('image/')) {
+      toast({
+        description: 'Veuillez sélectionner une image valide',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        description: 'La taille du fichier ne doit pas dépasser 5 MB',
+        variant: 'destructive',
+      })
+      return
+    }
 
     setUploading(true)
     try {
-      // Create FormData for server-side upload
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('userId', editingProfile.id)
 
-      // Upload via API route (server handles auth and permissions)
-      const response = await fetch('/api/upload-avatar', {
+      const token = localStorage.getItem('token')
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/files/upload/avatars`, {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
         body: formData,
       })
 
@@ -128,14 +140,20 @@ export default function AdminProfilePage() {
         throw new Error('Upload failed')
       }
 
-      const { publicUrl } = await response.json()
+      const { url } = await response.json()
       
-      // Add cache busting parameter to force image reload
-      const cacheBustingUrl = `${publicUrl}?t=${Date.now()}`
-
+      // Update avatar URL in backend
+      await UserApi.updateUser(String(user.id), {
+        avatarUrl: url,
+      })
+      
+      // Refresh user data in auth context to update header
+      await refreshUser()
+      
+      // Update local profile state with new avatar
       const updatedProfile = {
         ...editingProfile,
-        avatar_url: cacheBustingUrl,
+        avatarUrl: url,
       }
       
       setEditingProfile(updatedProfile)
@@ -143,12 +161,11 @@ export default function AdminProfilePage() {
 
       toast({
         description: 'Photo de profil téléchargée avec succès',
-        variant: 'success',
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error uploading avatar:', error)
       toast({
-        description: 'Erreur lors du téléchargement. Vérifiez les permissions Supabase Storage.',
+        description: error.message || 'Erreur lors du téléchargement',
         variant: 'destructive',
       })
     } finally {
@@ -174,12 +191,9 @@ export default function AdminProfilePage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Avatar className="h-16 w-16">
-            <AvatarImage src={editingProfile?.avatar_url} />
+            <AvatarImage src={editingProfile?.avatarUrl} />
             <AvatarFallback className="bg-primary text-primary-foreground text-lg">
-              {editingProfile?.full_name
-                ?.split(' ')
-                .map(n => n[0])
-                .join('')}
+              {editingProfile?.firstName?.[0]}{editingProfile?.lastName?.[0]}
             </AvatarFallback>
           </Avatar>
           <div>
@@ -220,12 +234,9 @@ export default function AdminProfilePage() {
           {/* Avatar Section */}
           <div className="flex items-center gap-6 ">
             <Avatar className="h-24 w-24">
-              <AvatarImage src={editingProfile?.avatar_url} />
+              <AvatarImage src={editingProfile?.avatarUrl} />
               <AvatarFallback className="bg-primary text-primary-foreground">
-                {editingProfile?.full_name
-                  ?.split(' ')
-                  .map(n => n[0])
-                  .join('')}
+                {editingProfile?.firstName?.[0]}{editingProfile?.lastName?.[0]}
               </AvatarFallback>
             </Avatar>
          { isEditing && <div className="flex-1 space-y-2">
@@ -247,14 +258,29 @@ export default function AdminProfilePage() {
           {/* Form Fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <Label htmlFor="full_name">Nom complet</Label>
+              <Label htmlFor="firstName">Prénom</Label>
               <Input
-                id="full_name"
-                value={editingProfile?.full_name || ''}
+                id="firstName"
+                value={editingProfile?.firstName || ''}
                 onChange={(e) =>
                   setEditingProfile({
                     ...editingProfile!,
-                    full_name: e.target.value,
+                    firstName: e.target.value,
+                  })
+                }
+                disabled={!isEditing}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="lastName">Nom</Label>
+              <Input
+                id="lastName"
+                value={editingProfile?.lastName || ''}
+                onChange={(e) =>
+                  setEditingProfile({
+                    ...editingProfile!,
+                    lastName: e.target.value,
                   })
                 }
                 disabled={!isEditing}
@@ -271,7 +297,6 @@ export default function AdminProfilePage() {
               />
             </div>
 
-
             <div className="space-y-2">
               <Label htmlFor="role">Rôle</Label>
               <Input
@@ -283,31 +308,6 @@ export default function AdminProfilePage() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Utilisateurs</CardTitle>
-            <Users className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{profile.users_count}</div>
-            <p className="text-xs text-muted-foreground">utilisateurs total</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Cours</CardTitle>
-            <BookOpen className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{profile.courses_count}</div>
-            <p className="text-xs text-muted-foreground">cours total</p>
-          </CardContent>
-        </Card>
-      </div>
 
       {/* Admin Info */}
       <Card>

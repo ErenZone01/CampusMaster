@@ -40,11 +40,21 @@ interface CommandBarItem {
   keywords?: string[]
 }
 
-export function CommandBar() {
-  const [open, setOpen] = useState(false)
+interface CommandBarProps {
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+}
+
+export function CommandBar(props: CommandBarProps) {
+  const { open: controlledOpen, onOpenChange } = props
+  const [internalOpen, setInternalOpen] = useState(false)
   const router = useRouter()
   const { user, signOut } = useAuth()
   const { setTheme, resolvedTheme } = useTheme()
+
+  // Use controlled or uncontrolled state
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen
+  const setOpen = onOpenChange || setInternalOpen
 
   // Handle keyboard shortcut
   useEffect(() => {

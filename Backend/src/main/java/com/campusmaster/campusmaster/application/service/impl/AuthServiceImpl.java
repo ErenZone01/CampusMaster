@@ -89,9 +89,11 @@ public class AuthServiceImpl implements AuthService {
         AuthResponse response = new AuthResponse();
         response.setToken(token);
         response.setUser(UserResponse.builder()
+                    .id(user.getId())
                     .email(user.getEmail())
                     .firstName(user.getFirstName())
                     .lastName(user.getLastName())
+                    .avatarUrl(user.getAvatarUrl())
                     .role(user.getRole())
                     .build());
 

@@ -17,8 +17,8 @@ export const AuthService = USE_MOCK ? MockAuthService : {
           role: role,
           first_name: response.user.firstName,
           last_name: response.user.lastName,
-          id: response.user.email,
-          avatarUrl: null,
+          id: response.user.id ? String(response.user.id) : response.user.email,
+          avatarUrl: response.user.avatarUrl || null,
           departmentId: null,
           isActive: true
         } as UserPublic,
@@ -53,14 +53,14 @@ export const AuthService = USE_MOCK ? MockAuthService : {
       return {
         success: true,
         data: {
+          id: response.id ? String(response.id) : response.email, // Use numeric ID if available, fallback to email
           email: response.email,
           firstName: response.firstName,
           lastName: response.lastName,
           role: response.role.toLowerCase() as any,
           first_name: response.firstName,
           last_name: response.lastName,
-          id: response.email,
-          avatarUrl: null,
+          avatarUrl: response.avatarUrl || null,
           departmentId: null,
           isActive: true
         } as UserPublic

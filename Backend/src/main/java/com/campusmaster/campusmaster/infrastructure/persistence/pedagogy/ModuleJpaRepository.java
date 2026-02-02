@@ -13,6 +13,7 @@ public interface ModuleJpaRepository extends JpaRepository<Module, Long>, Module
 
     List<Module> findAll();
 
+    @Override
     Module save(Module module);
 
     boolean existsByCode(String code);

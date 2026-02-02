@@ -11,6 +11,7 @@ public interface StudentJpaRepository extends JpaRepository<Student, Long>, Stud
     Optional<Student> findByINE(String INE);
         boolean existsByINE(String INE);
         Boolean existsByEmail(String email);
+        @Override
         Student save(Student student);
         Optional<Student> findById(Long id);
         void deleteById(Long id);

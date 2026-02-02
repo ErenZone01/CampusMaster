@@ -142,7 +142,7 @@ public class UserController {
                 .id(user.getId())
                 .email(user.getEmail())
                 .firstName(user.getFirstName())
-                .lastName(user.getLastName())
+                .lastName(user.getLastName())                .avatarUrl(user.getAvatarUrl())                .avatarUrl(user.getAvatarUrl())
                 .role(user.getRole())
                 .build());
         
@@ -197,6 +197,9 @@ public class UserController {
         }
         if (request.getLastName() != null) {
             user.setLastName(request.getLastName());
+        }
+        if (request.getAvatarUrl() != null) {
+            user.setAvatarUrl(request.getAvatarUrl());
         }
         if (request.getEnabled() != null) {
             user.setEnabled(request.getEnabled());

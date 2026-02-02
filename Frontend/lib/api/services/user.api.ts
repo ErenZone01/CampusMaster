@@ -6,6 +6,7 @@ export interface User {
   firstName: string
   lastName: string
   role: string
+  avatarUrl?: string | null
   enabled?: boolean
   // Champs spécifiques pour Student
   dateOfBirth?: string
@@ -20,6 +21,7 @@ export interface UpdateUserRequest {
   email?: string
   firstName?: string
   lastName?: string
+  avatarUrl?: string | null
   enabled?: boolean
   role?: string
   // Champs spécifiques pour Student

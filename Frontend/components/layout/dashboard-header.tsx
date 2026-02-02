@@ -28,8 +28,13 @@ interface DashboardHeaderProps {
 
 export function DashboardHeader({ userName, userEmail, userAvatar, role }: DashboardHeaderProps) {
   const [commandOpen, setCommandOpen] = useState(false)
-  const { signOut } = useAuth()
+  const { signOut, user } = useAuth()
   const pathname = usePathname()
+
+  // Use data from auth context if available, fallback to props
+  const displayName = user ? `${user.firstName} ${user.lastName}` : userName
+  const displayEmail = user?.email || userEmail
+  const displayAvatar = user?.avatarUrl || userAvatar
 
   // Extract role from pathname if not provided
   const detectedRole = role || (pathname.includes('/student') ? 'student' : pathname.includes('/teacher') ? 'teacher' : pathname.includes('/admin') ? 'admin' : 'student')
@@ -62,9 +67,9 @@ export function DashboardHeader({ userName, userEmail, userAvatar, role }: Dashb
             <DropdownMenuTrigger asChild>
               <button className="outline-none">
                 <Avatar className="h-8 w-8 cursor-pointer">
-                  <AvatarImage src={userAvatar} />
+                  <AvatarImage src={displayAvatar} />
                   <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                    {userName
+                    {displayName
                       ?.split(' ')
                       .map(n => n[0])
                       .join('')
@@ -76,9 +81,9 @@ export function DashboardHeader({ userName, userEmail, userAvatar, role }: Dashb
             <DropdownMenuContent align="end" className="w-56">
               <div className="flex items-center gap-3 px-2 py-1.5">
                 <Avatar className="h-10 w-10">
-                  <AvatarImage src={userAvatar} />
+                  <AvatarImage src={displayAvatar} />
                   <AvatarFallback className="bg-primary text-primary-foreground">
-                    {userName
+                    {displayName
                       ?.split(' ')
                       .map(n => n[0])
                       .join('')
@@ -86,8 +91,8 @@ export function DashboardHeader({ userName, userEmail, userAvatar, role }: Dashb
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{userName}</p>
-                  <p className="text-xs text-muted-foreground truncate">{userEmail}</p>
+                  <p className="text-sm font-medium truncate">{displayName}</p>
+                  <p className="text-xs text-muted-foreground truncate">{displayEmail}</p>
                 </div>
               </div>
               <DropdownMenuSeparator />

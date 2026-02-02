@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRequireAuth } from '@/hooks/use-auth'
-import { UserService, CourseService, AssignmentService, GradeService, EnrollmentService } from '@/lib/mock'
+import { UserApi, CourseApi } from '@/lib/api/services'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -55,16 +55,17 @@ export default function AdminReportsPage() {
   const fetchStats = async () => {
     try {
       // Fetch users
-      const usersResult = await UserService.getUsers()
-      const users = usersResult.data?.data || []
-      const studentCount = users.filter((u: any) => u.role === 'student').length
-      const teacherCount = users.filter((u: any) => u.role === 'teacher').length
+      const usersResult = await UserApi.getUsers({ page: 0, size: 1000 })
+      const users = usersResult.content || []
+      const studentCount = users.filter((u: any) => u.role?.toLowerCase() === 'student').length
+      const teacherCount = users.filter((u: any) => u.role?.toLowerCase() === 'teacher').length
 
       // Fetch courses
-      const coursesResult = await CourseService.getCourses()
-      const courseCount = coursesResult.data?.data?.length || 0
+      const coursesResult = await CourseApi.getAllCourses({ page: 0, size: 1000 })
+      const courseCount = coursesResult.content?.length || 0
 
       // Mock: Utiliser des données simulées pour assignments et grades
+      // TODO: Remplacer par de vraies données quand les endpoints seront disponibles
       const assignmentCount = 22
       const grades = [15, 12, 18, 14, 16, 13, 17, 11, 19, 10, 15, 16, 14, 18, 12, 13, 15, 17, 14, 16, 18]
 

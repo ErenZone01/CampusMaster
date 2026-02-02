@@ -18,18 +18,22 @@ export interface RegisterData {
 export interface AuthResponse {
   token: string
   user: {
+    id?: number
     email: string
     firstName: string
     lastName: string
     role: string
+    avatarUrl?: string | null
   }
 }
 
 export interface User {
+  id?: number
   email: string
   firstName: string
   lastName: string
   role: string
+  avatarUrl?: string | null
 }
 
 export class AuthApi {

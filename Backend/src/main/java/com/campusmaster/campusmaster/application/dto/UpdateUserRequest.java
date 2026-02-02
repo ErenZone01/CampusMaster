@@ -17,6 +17,7 @@ public class UpdateUserRequest {
     private String email;
     private String firstName;
     private String lastName;
+    private String avatarUrl;
     private Boolean enabled;
     private String role;  // ADMIN, TEACHER, STUDENT
     

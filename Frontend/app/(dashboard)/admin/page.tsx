@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { UserService, CourseService, EnrollmentService } from '@/lib/mock'
+import { UserApi, CourseApi } from '@/lib/api/services'
 import { DepartmentApi } from '@/lib/api/services/department.api'
 import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -72,22 +72,21 @@ export default function AdminDashboardPage() {
   async function fetchDashboardData() {
     try {
       // Fetch all users
-      const usersResult = await UserService.getUsers({}, 1, 1000)
-      const users = usersResult.success && usersResult.data ? usersResult.data.data : []
+      const usersResult = await UserApi.getUsers({ page: 0, size: 1000 })
+      const users = usersResult.content || []
 
-      const roleCounts = users.reduce((acc: any, u) => {
-        acc[u.role] = (acc[u.role] || 0) + 1
+      const roleCounts = users.reduce((acc: Record<string, number>, u: any) => {
+        const role = u.role?.toLowerCase() || 'student'
+        acc[role] = (acc[role] || 0) + 1
         return acc
       }, {})
 
       // Fetch all courses
-      const coursesResult = await CourseService.getCourses({}, 1, 1000)
-      const courses = coursesResult.success && coursesResult.data ? coursesResult.data.data : []
-      const activeCourses = courses.filter(c => c.status === 'published').length
+      const coursesResult = await CourseApi.getAllCourses({ page: 0, size: 1000 })
+      const courses = coursesResult.content || []
+      const activeCourses = courses.filter(c => c.status === 'PUBLISHED').length
 
       const departments = await DepartmentApi.getDepartments()
-
-      const enrollments = await EnrollmentService.getStudentEnrollments('') // We'll count all later
       
       setStats({
         totalUsers: users.length,
@@ -97,29 +96,42 @@ export default function AdminDashboardPage() {
         totalCourses: courses.length,
         activeCourses: activeCourses,
         totalDepartments: departments.length,
-        totalEnrollments: 0, // Mock doesn't have direct count, would need to iterate
+        totalEnrollments: 0, // Would need enrollment API endpoint
       })
 
       // Recent users (last 5)
       const recentUsersList = users
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .sort((a: any, b: any) => {
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+          return dateB - dateA
+        })
         .slice(0, 5)
+        .map((u: any) => ({
+          id: String(u.id),
+          first_name: u.firstName,
+          last_name: u.lastName,
+          role: u.role?.toLowerCase() || 'student',
+          created_at: u.createdAt || new Date().toISOString(),
+        }))
 
       setRecentUsers(recentUsersList)
 
       // Recent courses (last 5)
       const recentCoursesList = courses
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .sort((a: any, b: any) => {
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+          return dateB - dateA
+        })
         .slice(0, 5)
-        .map(c => ({
-          id: c.id,
+        .map((c: any) => ({
+          id: String(c.id),
           code: c.code,
-          name: c.name,
-          status: c.status,
-          teacher_name: c.teacher?.first_name && c.teacher?.last_name 
-            ? `${c.teacher.first_name} ${c.teacher.last_name}` 
-            : '',
-          created_at: c.created_at,
+          name: c.title,
+          status: c.status?.toLowerCase() || 'draft',
+          teacher_name: c.teacherName || '',
+          created_at: c.createdAt || new Date().toISOString(),
         }))
 
       setRecentCourses(recentCoursesList)
@@ -144,7 +156,7 @@ export default function AdminDashboardPage() {
   }
 
   function getStatusBadge(status: string) {
-    switch (status) {
+    switch (status.toLowerCase()) {
       case 'published':
         return <Badge className="bg-green-500/10 text-green-600">Publié</Badge>
       case 'draft':
