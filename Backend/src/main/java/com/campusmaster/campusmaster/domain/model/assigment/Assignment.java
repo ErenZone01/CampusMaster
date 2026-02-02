@@ -1,21 +1,22 @@
 package com.campusmaster.campusmaster.domain.model.assigment;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
-import java.util.List;
-
 import com.campusmaster.campusmaster.domain.model.course.Course;
-import com.campusmaster.campusmaster.domain.model.user.Teacher;
 
 @Entity
 @Table(name = "assignments")
 @NoArgsConstructor
 @Getter
 @Setter
+@Builder
+@AllArgsConstructor
 public class Assignment {
 
     @Id
@@ -25,22 +26,20 @@ public class Assignment {
     @Column(nullable = false)
     private String title;
 
-    @Column(columnDefinition = "TEXT", nullable = false)
-    private String instructions;
+    @Column(length = 1000)
+    private String description;
 
     @Column(nullable = false)
-    private LocalDateTime dueDate;
+    private String instruction;
 
-    @ManyToOne(optional = false)
+    @Column(nullable = false)
+    private LocalDateTime deadline;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "course_id")
     private Course course;
 
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "teacher_id")
-    private Teacher teacher;
-
-    @OneToMany(mappedBy = "assignment")
-    private List<Submission> submissions;
-
-    // Getters & Setters
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean published = true;
 }

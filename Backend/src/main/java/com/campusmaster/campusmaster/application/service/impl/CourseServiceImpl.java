@@ -1,9 +1,9 @@
 package com.campusmaster.campusmaster.application.service.impl;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
 import com.campusmaster.campusmaster.application.dto.CourseResponse;
@@ -16,10 +16,10 @@ import com.campusmaster.campusmaster.domain.model.user.Teacher;
 import com.campusmaster.campusmaster.domain.repository.CourseRepository;
 import com.campusmaster.campusmaster.domain.repository.ModuleRepository;
 import com.campusmaster.campusmaster.domain.repository.TeacherRepository;
+import com.campusmaster.campusmaster.domain.model.pedagogy.Module;
 
 import lombok.AllArgsConstructor;
 
-import com.campusmaster.campusmaster.domain.model.pedagogy.Module;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -35,6 +35,21 @@ public class CourseServiceImpl implements CourseService {
     private TeacherRepository teacherRepository;
 
     @Override
+    public List<Course> getCoursesBySemester(Semester semester) {
+        throw new UnsupportedOperationException("Unimplemented method 'getCoursesBySemester'");
+    }
+
+    @Override
+    public List<Course> getCoursesByModule(Long moduleId) {
+        return courseRepository.findByModule(moduleRepository.findById(moduleId).get());
+    }
+
+    @Override
+    public List<Course> getCoursesByTeacher(Long teacherId) {
+        return courseRepository.findByTeacher(teacherRepository.findById(teacherId).get());
+    }
+
+    @Override
     public CourseResponse createCourse(CreateCourseRequest request) {
         if (moduleRepository.findById(request.getModuleId()).isEmpty()) {
             throw new IllegalArgumentException("Module not found with id: " + request.getModuleId());
@@ -47,7 +62,6 @@ public class CourseServiceImpl implements CourseService {
         Teacher teacher = teacherRepository.findById(request.getTeacherId()).get();
 
         module.getTeachers().add(teacher);
-        
 
         Course course = Course.builder()
                 .title(request.getTitle())
@@ -58,24 +72,27 @@ public class CourseServiceImpl implements CourseService {
         Course saved = courseRepository.save(course);
         moduleRepository.save(module);
         return CourseResponse.builder()
-            .id(saved.getId())
-            .title(saved.getTitle())
-            .description(saved.getDescription())
-            .moduleId(saved.getModule() != null ? saved.getModule().getId() : null)
-            .moduleName(saved.getModule() != null ? saved.getModule().getName() : null)
-            .teacherId(saved.getTeacher() != null ? saved.getTeacher().getId() : null)
-            .teacherFirstName(saved.getTeacher() != null ? saved.getTeacher().getFirstName() : null)
-            .teacherLastName(saved.getTeacher() != null ? saved.getTeacher().getLastName() : null)
-            .build();
+                .id(saved.getId())
+                .title(saved.getTitle())
+                .description(saved.getDescription())
+                .moduleId(saved.getModule() != null ? saved.getModule().getId() : null)
+                .moduleName(saved.getModule() != null ? saved.getModule().getName() : null)
+                .teacherId(saved.getTeacher() != null ? saved.getTeacher().getId() : null)
+                .teacherFirstName(saved.getTeacher() != null ? saved.getTeacher().getFirstName() : null)
+                .teacherLastName(saved.getTeacher() != null ? saved.getTeacher().getLastName() : null)
+                .build();
     }
 
     @Override
-    public List<CourseResponse> getAllCourses(Student student) {
-        List<Module> modules = moduleRepository.findByDepartmentId(student.getDepartment().getId());
-        List<Course> courses= new ArrayList<>();
-        modules.forEach((e)->{
-            courses.addAll(courseRepository.findByModule(e));
-        });
+    public List<CourseResponse> getCoursesByModule(Student student, Long moduleId) {
+        if (!student.isValidated()) {
+            throw new AccessDeniedException("Profil étudiant non validé");
+        }
+        if (moduleRepository.findById(moduleId) == null) {
+            throw new IllegalArgumentException("Module : " + moduleId + " not found");
+        }
+        Module modules = moduleRepository.findById(moduleId).get();
+        List<Course> courses = courseRepository.findByModule(modules);
         List<CourseResponse> resp = courses.stream().map(c -> CourseResponse.builder()
                 .id(c.getId())
                 .title(c.getTitle())
@@ -90,18 +107,21 @@ public class CourseServiceImpl implements CourseService {
     }
 
     @Override
-    public List<Course> getCoursesBySemester(Semester semester) {
-        throw new UnsupportedOperationException("Unimplemented method 'getCoursesBySemester'");
+    public List<CourseResponse> getCoursesByTeacher(Teacher teacher, Long moduleId) {
+        if(moduleRepository.findById(moduleId) == null){
+            throw new IllegalArgumentException("module doesn't exist");
+        }
+
+        Module module = moduleRepository.findByIdAndTeachers(moduleId, teacher);
+        List<Course> course = courseRepository.findByModule(module);
+        return course.stream().map(e -> CourseResponse.builder()
+                .description(e.getDescription())
+                .moduleId(e.getModule().getId())
+                .moduleName(e.getModule().getName())
+                .teacherFirstName(e.getTeacher().getFirstName())
+                .teacherLastName(e.getTeacher().getLastName())
+                .id(e.getId())
+                .build()).toList();
     }
 
-    @Override
-    public List<Course> getCoursesByModule(Long moduleId) {
-        return courseRepository.findByModule(moduleRepository.findById(moduleId).get());
-    }
-
-    @Override
-    public List<Course> getCoursesByTeacher(Long teacherId) {
-        return courseRepository.findByTeacher(teacherRepository.findById(teacherId).get());
-    }
-    
 }

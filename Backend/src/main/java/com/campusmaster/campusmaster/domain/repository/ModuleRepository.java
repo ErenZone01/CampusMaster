@@ -5,11 +5,17 @@ import java.util.Optional;
 
 import com.campusmaster.campusmaster.domain.model.pedagogy.Module;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Semester;
+import com.campusmaster.campusmaster.domain.model.user.Teacher;
 
 public interface ModuleRepository {
     Optional<Module> findById(Long id);
 
     List<Module> findAll();
+
+    List<Module> findByTeachers(Teacher teacher);
+    
+    Module findByIdAndTeachers(Long id,Teacher teacher);
+
 
     Module save(Module module);
     

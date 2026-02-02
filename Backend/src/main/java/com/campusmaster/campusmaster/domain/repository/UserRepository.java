@@ -10,6 +10,7 @@ import com.campusmaster.campusmaster.domain.model.user.User;
 
 @Repository
 public interface UserRepository {
+    boolean existsById(Long id);
     Optional<User> findByEmail(String email);
     User save(User user);
     boolean existsByEmail(String email);

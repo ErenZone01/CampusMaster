@@ -2,6 +2,11 @@ package com.campusmaster.campusmaster.domain.model.course;
 
 import com.campusmaster.campusmaster.domain.model.user.Teacher;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Module;
+import com.campusmaster.campusmaster.domain.model.ressource.Ressource;
+
+import java.util.List;
+
+import jakarta.persistence.OneToMany;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -44,4 +49,7 @@ public class Course {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "teacher_id", nullable = false)
     private Teacher teacher;
+
+    @OneToMany(mappedBy = "course")
+    private List<Ressource> ressources;
 }

@@ -1,5 +1,6 @@
 package com.campusmaster.campusmaster.infrastructure.persistence.user;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,4 +15,5 @@ public interface StudentJpaRepository extends JpaRepository<Student, Long>, Stud
         Student save(Student student);
         Optional<Student> findById(Long id);
         void deleteById(Long id);
+        List<Student> findByValidated(Boolean validated);
 }

@@ -3,6 +3,7 @@ package com.campusmaster.campusmaster.application.service.impl;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
 import com.campusmaster.campusmaster.domain.repository.DepartmentRepository;
@@ -13,8 +14,8 @@ import com.campusmaster.campusmaster.application.service.ModuleService;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Department;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Module;
 import com.campusmaster.campusmaster.application.dto.ModuleResponse;
-import com.campusmaster.campusmaster.application.dto.DepartmentResponse;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Semester;
+import com.campusmaster.campusmaster.domain.model.user.Student;
 import com.campusmaster.campusmaster.domain.model.user.Teacher;
 
 @Service
@@ -168,6 +169,25 @@ public class ModuleServiceImpl implements ModuleService {
                 .build()).toList();
     }
 
+    @Override
+    public List<ModuleResponse> getModules(Student student) {
+        if (!student.isValidated()){
+                throw new AccessDeniedException("Profil étudiant non validé");
+        }
+
+        List<Module> modules = moduleRepository.findByDepartmentId(student.getDepartment().getId());
+
+        return modules.stream()
+                .map(c -> ModuleResponse.builder()
+                        .code(c.getCode())
+                        .departmentId(c.getDepartment().getId())
+                        .departmentName(c.getDepartment().getName())
+                        .id(c.getId())
+                        .name(c.getName())
+                        .semester(c.getSemester())
+                        .teacherIds(c.getTeachers().stream().map(d -> d.getId()).toList())
+                        .build()).toList();
+    }
 
     @Override
     public void deleteModule(Long id) {
@@ -175,6 +195,23 @@ public class ModuleServiceImpl implements ModuleService {
             throw new RuntimeException("Module not found");
         }
         moduleRepository.deleteById(id);
+    }
+
+
+    @Override
+    public List<ModuleResponse> getModulesTeacher(Teacher teacher) {
+        List<Module> modules= moduleRepository.findByTeachers(teacher);
+        return modules.stream().map(e-> ModuleResponse.builder()
+            .code(e.getCode())
+            .departmentId(e.getDepartment().getId())
+            .departmentName(e.getDepartment().getName())
+            .id(e.getId())
+            .name(e.getName())
+            .semester(e.getSemester())
+            .teacherIds(e.getTeachers().stream().map(d-> d.getId()).toList())
+            .build()
+    
+        ).toList();
     }
 
 }

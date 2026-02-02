@@ -1,5 +1,6 @@
 package com.campusmaster.campusmaster.domain.repository;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.stereotype.Repository;
@@ -15,4 +16,6 @@ public interface StudentRepository {
         Student save(Student student);
         Optional<Student> findById(Long id);
         void deleteById(Long id);
+        List<Student> findByValidated(Boolean validated);
+
 }

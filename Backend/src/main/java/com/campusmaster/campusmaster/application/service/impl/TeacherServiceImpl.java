@@ -1,48 +1,79 @@
 package com.campusmaster.campusmaster.application.service.impl;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
+import java.util.List;
 
-import com.campusmaster.campusmaster.application.dto.StudentResponse;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.campusmaster.campusmaster.application.dto.CreateTeacherRequest;
+import com.campusmaster.campusmaster.application.dto.UserResponse;
 import com.campusmaster.campusmaster.application.service.TeacherService;
-import com.campusmaster.campusmaster.domain.model.user.Student;
+import com.campusmaster.campusmaster.domain.model.pedagogy.Department;
+import com.campusmaster.campusmaster.domain.model.pedagogy.Module;
+import com.campusmaster.campusmaster.domain.model.user.Role;
 import com.campusmaster.campusmaster.domain.model.user.Teacher;
-import com.campusmaster.campusmaster.domain.repository.StudentRepository;
+import com.campusmaster.campusmaster.domain.repository.DepartmentRepository;
+import com.campusmaster.campusmaster.domain.repository.ModuleRepository;
+import com.campusmaster.campusmaster.domain.repository.TeacherRepository;
+import com.campusmaster.campusmaster.domain.repository.UserRepository;
 
 @Service
+@Transactional
 public class TeacherServiceImpl implements TeacherService {
 
     @Autowired
-    private StudentRepository studentRepository;
+    private TeacherRepository teacherRepository;
+    @Autowired
+    private UserRepository userRepository;
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+    @Autowired
+    private ModuleRepository moduleRepository;
+    @Autowired
+    private DepartmentRepository departmentRepository;
 
     @Override
-    public StudentResponse validateStudent(Teacher teacher,Long studentId, Boolean isvalidated) {
-        Student student = studentRepository.findById(studentId)
-                .orElseThrow(() -> new IllegalArgumentException("Student not found"));
-
-        if (!teacher.getDepartment().equals(student.getDepartment().getCode())){
-           throw new IllegalArgumentException("The teacher is not in the same department.");
+    public UserResponse createTeacher(CreateTeacherRequest request) {
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new RuntimeException("Email already used");
         }
 
-        student.setValidated(isvalidated);
+        if (!departmentRepository.existsByCode(request.getDepartment())){
+            throw new RuntimeException("Department not found");
+        }
 
-        
+        Teacher teacher = new Teacher();
+        teacher.setFirstName(request.getFirstName());
+        teacher.setLastName(request.getLastName());
+        teacher.setEmail(request.getEmail());
+        teacher.setPassword(passwordEncoder.encode(request.getPassword()));
+        teacher.setRole(Role.TEACHER);
+        teacher.setEnabled(true);
+        teacher.setDepartment(request.getDepartment());
 
-        studentRepository.save(student);
+        Teacher teacher_save = teacherRepository.save(teacher);
 
-        return StudentResponse.builder()
-                .email(student.getEmail())
-                .firstName(student.getFirstName())
-                .lastName(student.getLastName())
-                .INE(student.getINE())
-                .dateOfBirth(student.getDateOfBirth())
-                .department_code(student.getDepartment().getCode())
-                .validated(student.isValidated())
-                .build();
+        Department department = departmentRepository.findByCode(request.getDepartment()).get();
+        if (moduleRepository.findByDepartmentId(department.getId()) != null){
+            List<Module> module = moduleRepository.findByDepartmentId(department.getId());
+            module.forEach((e)->{
+                e.getTeachers().add(teacher_save);
+                moduleRepository.save(e);
+            });
+        }
+
+        return  UserResponse.builder()
+                            .email(teacher.getEmail())
+                            .firstName(teacher.getFirstName())
+                            .lastName(teacher.getLastName())
+                            .role(teacher.getRole())
+                            .build();
+
     }
 
 
+    
 
-  
 }
-
