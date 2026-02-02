@@ -1,8 +1,9 @@
 package com.campusmaster.campusmaster.application.service;
 
-import com.campusmaster.campusmaster.application.dto.StudentResponse;
-import com.campusmaster.campusmaster.domain.model.user.Teacher;
+import com.campusmaster.campusmaster.application.dto.CreateTeacherRequest;
+import com.campusmaster.campusmaster.application.dto.UserResponse;
 
 public interface TeacherService {
-    StudentResponse validateStudent(Teacher teacher,Long studentId, Boolean isValidated);
+    UserResponse createTeacher(CreateTeacherRequest request);
+
 }

@@ -23,6 +23,7 @@ import com.campusmaster.campusmaster.application.dto.DepartmentResponse;
 import com.campusmaster.campusmaster.application.service.AdminService;
 import com.campusmaster.campusmaster.application.service.DepartmentService;
 import com.campusmaster.campusmaster.application.service.ModuleService;
+import com.campusmaster.campusmaster.application.service.TeacherService;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Semester;
 
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -44,11 +45,14 @@ public class AdminController {
     @Autowired
     private ModuleService moduleService;
 
+    @Autowired
+    private TeacherService teacherService;
+
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/create/teachers")
     public ResponseEntity<UserResponse> createTeacher(
             @Valid @RequestBody CreateTeacherRequest request) {
-        return new ResponseEntity<>(adminService.createTeacher(request), HttpStatus.CREATED);
+        return new ResponseEntity<>(teacherService.createTeacher(request), HttpStatus.CREATED);
     }
 
     @PreAuthorize("hasRole('ADMIN')")
@@ -98,6 +102,13 @@ public class AdminController {
     public ResponseEntity<Void> deleteModule(@PathVariable Long id) {
         moduleService.deleteModule(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("account/delete/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> deleteAccount(@PathVariable Long id){
+        adminService.deleteAccount(id);
+        return new ResponseEntity<>(HttpStatus.OK);
     }
 
 }

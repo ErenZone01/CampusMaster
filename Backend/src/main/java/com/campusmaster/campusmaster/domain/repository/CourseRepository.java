@@ -1,6 +1,7 @@
 package com.campusmaster.campusmaster.domain.repository;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.stereotype.Repository;
 
@@ -12,6 +13,10 @@ import com.campusmaster.campusmaster.domain.model.pedagogy.Module;
 public interface CourseRepository {
     // Tous les cours d’un module
     List<Course> findByModule(Module module);
+
+    Optional<Course> findById(Long id);
+
+    boolean existsById(Long id);
 
     List<Course> findAll();
 

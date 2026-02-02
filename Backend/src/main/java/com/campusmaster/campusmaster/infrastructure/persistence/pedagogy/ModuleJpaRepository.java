@@ -6,12 +6,18 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Module;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Semester;
+import com.campusmaster.campusmaster.domain.model.user.Teacher;
 import com.campusmaster.campusmaster.domain.repository.ModuleRepository;
 
 public interface ModuleJpaRepository extends JpaRepository<Module, Long>, ModuleRepository {
     Optional<Module> findById(Long id);
 
     List<Module> findAll();
+
+    List<Module> findByTeachers(Teacher teacher);
+    
+    Module findByIdAndTeachers(Long id, Teacher teacher);
+
 
     Module save(Module module);
 

@@ -8,7 +8,6 @@ import com.campusmaster.campusmaster.application.dto.UserResponse;
 
 
 public interface AuthService {
-      // Add methods here
     UserResponse register(StudentRequest request);
     AuthResponse login(LoginRequest request);
     

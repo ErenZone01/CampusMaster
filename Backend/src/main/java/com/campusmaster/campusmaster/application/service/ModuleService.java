@@ -4,8 +4,9 @@ import java.util.List;
 
 import com.campusmaster.campusmaster.application.dto.CreateModuleRequest;
 import com.campusmaster.campusmaster.application.dto.ModuleResponse;
-import com.campusmaster.campusmaster.application.dto.DepartmentResponse;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Semester;
+import com.campusmaster.campusmaster.domain.model.user.Student;
+import com.campusmaster.campusmaster.domain.model.user.Teacher;
 
 public interface ModuleService {
     ModuleResponse createModule(CreateModuleRequest module);
@@ -13,6 +14,10 @@ public interface ModuleService {
     ModuleResponse updateModule(Long id, CreateModuleRequest module);
 
     ModuleResponse getModuleById(Long id);
+    
+    List<ModuleResponse> getModules(Student student);
+
+    List<ModuleResponse> getModulesTeacher(Teacher teacher);
 
     List<ModuleResponse> getAllModules();
 

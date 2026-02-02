@@ -1,7 +1,9 @@
 package com.campusmaster.campusmaster.presentation.controller;
 
+
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -29,14 +31,10 @@ public class Authentification {
     }
 
     @PostMapping("/login")
-    AuthResponse login(@RequestBody LoginRequest loginRequest) {
+    ResponseEntity<AuthResponse> login(@RequestBody LoginRequest loginRequest) {
         // Logique de connexion
-        return authService.login(loginRequest);
+        return new ResponseEntity<>(authService.login(loginRequest), HttpStatus.OK) ;
     }
 
-    @PostMapping("/admin-only")
-    @PreAuthorize("hasRole('ADMIN')")
-    public String adminEndpoint() {
-        return "Only admins can see this!";
-    }
+
 }

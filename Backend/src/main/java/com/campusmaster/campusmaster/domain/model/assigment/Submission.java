@@ -12,42 +12,47 @@ import java.time.LocalDateTime;
 import com.campusmaster.campusmaster.domain.model.user.Student;
 
 @Entity
-@Table(name = "submissions")
-@Getter
-@Setter
+@Table(
+    name = "submissions",
+    uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"assignment_id", "student_id"})
+    }
+)
+@Getter @Setter
+@NoArgsConstructor @AllArgsConstructor
 @Builder
-@AllArgsConstructor
-@NoArgsConstructor
 public class Submission {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "assignment_id")
-    private Assignment assignment;
-
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "student_id")
-    private Student student;
+    // 📄 Fichier
+    @Column(nullable = false)
+    private String filename;
 
     @Column(nullable = false)
-    private String filePath;
+    private String filepath;
 
+    @Column(nullable = false)
+    private String filetype;
+
+    // ⏱️ Date de soumission
     @Column(nullable = false)
     private LocalDateTime submittedAt;
 
-    @Column(nullable = false)
+    // 🎓 Note
     private Double grade;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(length = 1000)
     private String feedback;
 
-    @PrePersist
-    protected void onSubmit() {
-        this.submittedAt = LocalDateTime.now();
-    }
+    // 🔗 Relations
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "assignment_id")
+    private Assignment assignment;
 
-    // Getters & Setters
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "student_id")
+    private Student student;
 }

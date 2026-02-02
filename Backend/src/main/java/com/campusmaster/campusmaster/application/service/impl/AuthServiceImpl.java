@@ -1,6 +1,6 @@
 package com.campusmaster.campusmaster.application.service.impl;
 
-import org.springframework.security.access.AccessDeniedException;
+
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -42,6 +42,8 @@ public class AuthServiceImpl implements AuthService {
         Department department = departmentRepository.findByCode(request.getDepartment_code())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid department code"));
 
+        
+
         Student student = new Student();
         student.setFirstName(request.getFirstName());
         student.setLastName(request.getLastName());
@@ -75,15 +77,15 @@ public class AuthServiceImpl implements AuthService {
     public AuthResponse login(LoginRequest request) {
         // Logique d'authentification de l'utilisateur
         User user = userRepository.findByEmail(request.getEmail()).orElseThrow(() ->
-         new IllegalArgumentException("Invalid email or password")
+           new IllegalArgumentException("Invalid email or password")
         );
 
-        if (user.getRole() == Role.STUDENT) {
-            Student student = studentRepository.findByEmail(request.getEmail()).get();
-            if (!student.isValidated()){
-                throw new AccessDeniedException("Profil étudiant non validé");
-            }
-        }
+        // if (user.getRole() == Role.STUDENT) {
+        //     Student student = studentRepository.findByEmail(request.getEmail()).get();
+        //     if (!student.isValidated()){
+        //         throw new AccessDeniedException("Profil étudiant non validé");
+        //     }
+        // }
 
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
