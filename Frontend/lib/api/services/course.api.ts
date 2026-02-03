@@ -25,6 +25,7 @@ export interface CreateCourseRequest {
   description?: string
   credits: number
   maxStudents?: number
+  coverImage?: string
   departmentId: number
   semesterId: number
   teacherId: number
@@ -36,6 +37,7 @@ export interface UpdateCourseRequest {
   description?: string
   credits?: number
   maxStudents?: number
+  coverImage?: string
   status?: 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
   departmentId?: number
   semesterId?: number

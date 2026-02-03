@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CourseApi, DepartmentApi, SemesterApi, UserApi, type CourseResponse } from "@/lib/api/services";
+import {
+  CourseApi,
+  DepartmentApi,
+  SemesterApi,
+  UserApi,
+  type CourseResponse,
+} from "@/lib/api/services";
 import { useRequireAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,9 +63,12 @@ import {
   Edit,
   Trash2,
   MoreVertical,
+  Upload,
+  X,
 } from "lucide-react";
+import { FileApi } from "@/lib/api/services";
 
-type Course = CourseResponse
+type Course = CourseResponse;
 
 interface CourseForm {
   code: string;
@@ -71,6 +80,7 @@ interface CourseForm {
   credits: number;
   status: string;
   maxStudents: number | null;
+  coverImage?: string | null;
 }
 
 interface Teacher {
@@ -115,8 +125,10 @@ export default function AdminCoursesPage() {
     credits: 3,
     status: "DRAFT",
     maxStudents: null,
+    coverImage: null,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
 
   // Fetch courses, teachers, semesters, and departments
   const fetchData = async (showLoader = true) => {
@@ -132,16 +144,22 @@ export default function AdminCoursesPage() {
         ]);
 
       setCourses(coursesRes.content);
-      
-      const teachersFiltered = usersRes.content.filter((u: any) => u.role === 'TEACHER');
-      setTeachers(teachersFiltered.map((t: any) => ({ 
-        id: t.id, 
-        firstName: t.firstName, 
-        lastName: t.lastName 
-      })));
-      
+
+      const teachersFiltered = usersRes.content.filter(
+        (u: any) => u.role === "TEACHER",
+      );
+      setTeachers(
+        teachersFiltered.map((t: any) => ({
+          id: t.id,
+          firstName: t.firstName,
+          lastName: t.lastName,
+        })),
+      );
+
       setSemesters(semestersData.map((s: any) => ({ id: s.id, name: s.name })));
-      setDepartments(departmentsData.map((d: any) => ({ id: d.id, name: d.name })));
+      setDepartments(
+        departmentsData.map((d: any) => ({ id: d.id, name: d.name })),
+      );
     } catch (error) {
       console.error("Error fetching data:", error);
       toast({
@@ -167,7 +185,55 @@ export default function AdminCoursesPage() {
       credits: 3,
       status: "DRAFT",
       maxStudents: null,
+      coverImage: null,
     });
+  };
+
+  // Handle cover image upload
+  const handleUploadCoverImage = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "Erreur",
+        description: "Veuillez sélectionner une image valide",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "Erreur",
+        description: "L'image ne doit pas dépasser 5MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUploadingCover(true);
+    try {
+      const imageUrl = await FileApi.uploadFile(file, "courses");
+      setFormData({ ...formData, coverImage: imageUrl });
+      toast({
+        title: "Succès",
+        description: "Image téléchargée avec succès",
+      });
+    } catch (error: any) {
+      console.error("Error uploading cover image:", error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de télécharger l'image",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingCover(false);
+    }
   };
 
   // Handle create course
@@ -192,12 +258,13 @@ export default function AdminCoursesPage() {
       await CourseApi.createCourse({
         code: formData.code.toUpperCase(),
         title: formData.title,
-        description: formData.description || '',
+        description: formData.description || "",
         departmentId: formData.departmentId,
         teacherId: formData.teacherId,
         semesterId: formData.semesterId,
         credits: formData.credits,
         maxStudents: formData.maxStudents || undefined,
+        coverImage: formData.coverImage || undefined,
       });
 
       toast({
@@ -211,7 +278,8 @@ export default function AdminCoursesPage() {
       console.error("Error creating course:", error);
       toast({
         title: "Erreur",
-        description: error.response?.data?.message || "Impossible de créer le cours",
+        description:
+          error.response?.data?.message || "Impossible de créer le cours",
         variant: "destructive",
       });
     } finally {
@@ -242,13 +310,14 @@ export default function AdminCoursesPage() {
       await CourseApi.updateCourse(editingCourse.id, {
         code: formData.code.toUpperCase(),
         title: formData.title,
-        description: formData.description || '',
+        description: formData.description || "",
         departmentId: formData.departmentId,
         teacherId: formData.teacherId,
         semesterId: formData.semesterId,
         credits: formData.credits,
         status: formData.status as any,
         maxStudents: formData.maxStudents || undefined,
+        coverImage: formData.coverImage || undefined,
       });
 
       toast({
@@ -263,7 +332,9 @@ export default function AdminCoursesPage() {
       console.error("Error updating course:", error);
       toast({
         title: "Erreur",
-        description: error.response?.data?.message || "Impossible de mettre à jour le cours",
+        description:
+          error.response?.data?.message ||
+          "Impossible de mettre à jour le cours",
         variant: "destructive",
       });
     } finally {
@@ -285,7 +356,8 @@ export default function AdminCoursesPage() {
       console.error("Error deleting course:", error);
       toast({
         title: "Erreur",
-        description: error.response?.data?.message || "Impossible de supprimer le cours",
+        description:
+          error.response?.data?.message || "Impossible de supprimer le cours",
         variant: "destructive",
       });
     }
@@ -304,6 +376,7 @@ export default function AdminCoursesPage() {
       credits: course.credits,
       status: course.status,
       maxStudents: course.maxStudents,
+      coverImage: course.coverImage || null,
     });
     setIsEditDialogOpen(true);
   };
@@ -366,7 +439,8 @@ export default function AdminCoursesPage() {
             Gestion des Modules d'Enseignement
           </h1>
           <p className="text-muted-foreground mt-1">
-            Gérez toutes les instances de cours (matière + enseignant + semestre)
+            Gérez toutes les instances de cours (matière + enseignant +
+            semestre)
           </p>
         </div>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
@@ -380,7 +454,8 @@ export default function AdminCoursesPage() {
             <DialogHeader>
               <DialogTitle>Créer un module d'enseignement</DialogTitle>
               <DialogDescription>
-                Remplissez les informations pour créer une nouvelle instance de cours (matière + enseignant + semestre)
+                Remplissez les informations pour créer une nouvelle instance de
+                cours (matière + enseignant + semestre)
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -435,13 +510,57 @@ export default function AdminCoursesPage() {
                   }
                 />
               </div>
+              <div>
+                <Label htmlFor="create-cover">Image de couverture</Label>
+                <div className="space-y-2">
+                  {formData.coverImage ? (
+                    <div className="relative w-full h-32 rounded-lg overflow-hidden border">
+                      <img
+                        src={formData.coverImage}
+                        alt="Cover"
+                        className="w-full h-full object-cover"
+                      />
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="destructive"
+                        className="absolute top-2 right-2 h-6 w-6"
+                        onClick={() =>
+                          setFormData({ ...formData, coverImage: null })
+                        }
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="create-cover"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleUploadCoverImage}
+                        disabled={isUploadingCover}
+                        className="cursor-pointer"
+                      />
+                      {isUploadingCover && (
+                        <span className="text-sm text-muted-foreground">
+                          Upload...
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="create-department">Département *</Label>
                   <Select
-                    value={String(formData.departmentId || '')}
+                    value={String(formData.departmentId || "")}
                     onValueChange={(value) =>
-                      setFormData({ ...formData, departmentId: parseInt(value) })
+                      setFormData({
+                        ...formData,
+                        departmentId: parseInt(value),
+                      })
                     }
                   >
                     <SelectTrigger id="create-department" className="w-full">
@@ -449,7 +568,10 @@ export default function AdminCoursesPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {departments.map((department) => (
-                        <SelectItem key={department.id} value={String(department.id)}>
+                        <SelectItem
+                          key={department.id}
+                          value={String(department.id)}
+                        >
                           {department.name}
                         </SelectItem>
                       ))}
@@ -459,7 +581,7 @@ export default function AdminCoursesPage() {
                 <div>
                   <Label htmlFor="create-semester">Semestre *</Label>
                   <Select
-                    value={String(formData.semesterId || '')}
+                    value={String(formData.semesterId || "")}
                     onValueChange={(value) =>
                       setFormData({ ...formData, semesterId: parseInt(value) })
                     }
@@ -469,7 +591,10 @@ export default function AdminCoursesPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {semesters.map((semester) => (
-                        <SelectItem key={semester.id} value={String(semester.id)}>
+                        <SelectItem
+                          key={semester.id}
+                          value={String(semester.id)}
+                        >
                           {semester.name}
                         </SelectItem>
                       ))}
@@ -479,7 +604,9 @@ export default function AdminCoursesPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="create-max-students">Nombre d'étudiants</Label>
+                  <Label htmlFor="create-max-students">
+                    Nombre d'étudiants
+                  </Label>
                   <Input
                     id="create-max-students"
                     type="number"
@@ -489,7 +616,9 @@ export default function AdminCoursesPage() {
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        maxStudents: e.target.value ? parseInt(e.target.value) : null,
+                        maxStudents: e.target.value
+                          ? parseInt(e.target.value)
+                          : null,
                       })
                     }
                   />
@@ -497,7 +626,7 @@ export default function AdminCoursesPage() {
                 <div>
                   <Label htmlFor="create-teacher">Enseignant *</Label>
                   <Select
-                    value={String(formData.teacherId || '')}
+                    value={String(formData.teacherId || "")}
                     onValueChange={(value) =>
                       setFormData({ ...formData, teacherId: parseInt(value) })
                     }
@@ -530,9 +659,9 @@ export default function AdminCoursesPage() {
                     <SelectItem value="DRAFT">Brouillon</SelectItem>
                     <SelectItem value="PUBLISHED">Publié</SelectItem>
                     <SelectItem value="ARCHIVED">Archivé</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                  </SelectContent>
+                </Select>
+              </div>
               <Button
                 onClick={handleCreateCourse}
                 disabled={isSubmitting}
@@ -711,6 +840,48 @@ export default function AdminCoursesPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <div>
+              <Label htmlFor="edit-cover">Image de couverture</Label>
+              <div className="space-y-2">
+                {formData.coverImage ? (
+                  <div className="relative w-full h-32 rounded-lg overflow-hidden border">
+                    <img
+                      src={formData.coverImage}
+                      alt="Cover"
+                      className="w-full h-full object-cover"
+                    />
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="destructive"
+                      className="absolute top-2 right-2 h-6 w-6"
+                      onClick={() =>
+                        setFormData({ ...formData, coverImage: null })
+                      }
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="edit-cover"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleUploadCoverImage}
+                      disabled={isUploadingCover}
+                      className="cursor-pointer"
+                    />
+                    {isUploadingCover && (
+                      <span className="text-sm text-muted-foreground">
+                        Upload...
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-code">Code *</Label>
@@ -759,11 +930,12 @@ export default function AdminCoursesPage() {
                 }
               />
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit-department">Département *</Label>
                 <Select
-                  value={String(formData.departmentId || '')}
+                  value={String(formData.departmentId || "")}
                   onValueChange={(value) =>
                     setFormData({ ...formData, departmentId: parseInt(value) })
                   }
@@ -773,7 +945,10 @@ export default function AdminCoursesPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {departments.map((department) => (
-                      <SelectItem key={department.id} value={String(department.id)}>
+                      <SelectItem
+                        key={department.id}
+                        value={String(department.id)}
+                      >
                         {department.name}
                       </SelectItem>
                     ))}
@@ -783,7 +958,7 @@ export default function AdminCoursesPage() {
               <div>
                 <Label htmlFor="edit-semester">Semestre *</Label>
                 <Select
-                  value={String(formData.semesterId || '')}
+                  value={String(formData.semesterId || "")}
                   onValueChange={(value) =>
                     setFormData({ ...formData, semesterId: parseInt(value) })
                   }
@@ -812,7 +987,9 @@ export default function AdminCoursesPage() {
                 onChange={(e) =>
                   setFormData({
                     ...formData,
-                    maxStudents: e.target.value ? parseInt(e.target.value) : null,
+                    maxStudents: e.target.value
+                      ? parseInt(e.target.value)
+                      : null,
                   })
                 }
               />
@@ -821,7 +998,7 @@ export default function AdminCoursesPage() {
               <div>
                 <Label htmlFor="edit-teacher">Enseignant *</Label>
                 <Select
-                  value={String(formData.teacherId || '')}
+                  value={String(formData.teacherId || "")}
                   onValueChange={(value) =>
                     setFormData({ ...formData, teacherId: parseInt(value) })
                   }
@@ -838,25 +1015,26 @@ export default function AdminCoursesPage() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-            <div>
-              <Label htmlFor="edit-status">Statut</Label>
-              <Select
-                value={formData.status}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, status: value })
-                }
-              >
-                <SelectTrigger id="edit-status" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="DRAFT">Brouillon</SelectItem>
-                  <SelectItem value="PUBLISHED">Publié</SelectItem>
-                  <SelectItem value="ARCHIVED">Archivé</SelectItem>
+              <div>
+                <Label htmlFor="edit-status">Statut</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, status: value })
+                  }
+                >
+                  <SelectTrigger id="edit-status" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="DRAFT">Brouillon</SelectItem>
+                    <SelectItem value="PUBLISHED">Publié</SelectItem>
+                    <SelectItem value="ARCHIVED">Archivé</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
             <Button
               onClick={handleUpdateCourse}
               disabled={isSubmitting}
