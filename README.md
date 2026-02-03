@@ -15,7 +15,7 @@ Plateforme pédagogique pour la gestion des cours, devoirs et étudiants.
 
 ```bash
 # Lancer tout le projet
-docker-compose up -d
+docker-compose up -d --build
 
 # Voir les logs
 docker-compose logs -f
