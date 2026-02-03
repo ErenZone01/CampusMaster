@@ -7,11 +7,13 @@ import com.campusmaster.campusmaster.domain.model.pedagogy.Department;
 import com.campusmaster.campusmaster.domain.model.user.Admin;
 import com.campusmaster.campusmaster.domain.model.user.Role;
 import com.campusmaster.campusmaster.domain.model.user.Teacher;
+import com.campusmaster.campusmaster.domain.model.user.Student;
 import com.campusmaster.campusmaster.domain.repository.AcademicSemesterRepository;
 import com.campusmaster.campusmaster.domain.repository.CourseRepository;
 import com.campusmaster.campusmaster.domain.repository.DepartmentRepository;
+import com.campusmaster.campusmaster.domain.repository.StudentRepository;
 import com.campusmaster.campusmaster.domain.repository.UserRepository;
-import java.util.List;
+import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -27,14 +29,47 @@ public class DataInitializer implements CommandLineRunner {
     private final DepartmentRepository departmentRepository;
     private final AcademicSemesterRepository semesterRepository;
     private final CourseRepository courseRepository;
+    private final StudentRepository studentRepository;
     private final BCryptPasswordEncoder passwordEncoder;
 
     @Override
     public void run(String... args) {
         initializeDepartments();
+        initializeSemesters();
         initializeAdmin();
         initializeTeachers();
+        initializeStudents();
         initializeCourses();
+    }
+
+    private void initializeSemesters() {
+        if (semesterRepository.count() == 0) {
+            // Semestre actuel (2025-2026 S1)
+            AcademicSemester semester1 =
+                    AcademicSemester.builder()
+                            .name("Semestre 1 - 2025/2026")
+                            .code("S1-2025-2026")
+                            .startDate(LocalDate.of(2025, 9, 1))
+                            .endDate(LocalDate.of(2026, 1, 31))
+                            .isCurrent(true)
+                            .build();
+            semesterRepository.save(semester1);
+
+            // Semestre suivant (2025-2026 S2)
+            AcademicSemester semester2 =
+                    AcademicSemester.builder()
+                            .name("Semestre 2 - 2025/2026")
+                            .code("S2-2025-2026")
+                            .startDate(LocalDate.of(2026, 2, 1))
+                            .endDate(LocalDate.of(2026, 6, 30))
+                            .isCurrent(false)
+                            .build();
+            semesterRepository.save(semester2);
+
+            log.info("✅ 2 semestres par défaut créés");
+        } else {
+            log.info("ℹ️ Semestres déjà existants, initialisation ignorée");
+        }
     }
 
     private void initializeDepartments() {
@@ -128,15 +163,46 @@ public class DataInitializer implements CommandLineRunner {
         }
     }
 
+    private void initializeStudents() {
+        long studentCount = userRepository.countByRole(Role.STUDENT);
+
+        if (studentCount == 0) {
+            Department info = departmentRepository.findByCode("INFO").orElse(null);
+            if (info == null) {
+                log.warn("⚠️ Département INFO non trouvé, impossible de créer l'étudiant");
+                return;
+            }
+
+            Student student = new Student();
+            student.setFirstName("Étudiant");
+            student.setLastName("Test");
+            student.setEmail("student@campusmaster.com");
+            student.setPassword(passwordEncoder.encode("student123"));
+            student.setRole(Role.STUDENT);
+            student.setEnabled(true);
+            student.setValidated(true);
+            student.setDepartment(info);
+            student.setGender("M");
+            student.setDateOfBirth(java.sql.Date.valueOf("2000-01-15"));
+            student.setINE("INE" + System.currentTimeMillis());
+
+            studentRepository.save(student);
+            log.info("✅ Étudiant par défaut créé: student@campusmaster.com / student123");
+        } else {
+            log.info("ℹ️ Étudiants déjà existants, initialisation ignorée");
+        }
+    }
+
     private void initializeCourses() {
         if (courseRepository.count() == 0) {
-            log.info("🚀 Initialisation des cours de démonstration...");
+            log.info("🚀 Initialisation des cours par défaut...");
 
-            // Récupérer les départements existants
+            // Récupérer le département INFO
             Department info = departmentRepository.findByCode("INFO").orElse(null);
-            Department math = departmentRepository.findByCode("MATH").orElse(null);
-            Department phys = departmentRepository.findByCode("PHYS").orElse(null);
-            Department gest = departmentRepository.findByCode("GEST").orElse(null);
+            if (info == null) {
+                log.warn("⚠️ Département INFO non trouvé, impossible de créer des cours");
+                return;
+            }
 
             // Récupérer le semestre actuel ou le premier disponible
             AcademicSemester currentSemester =
@@ -150,149 +216,65 @@ public class DataInitializer implements CommandLineRunner {
                 return;
             }
 
-            // Récupérer quelques enseignants
-            List<Teacher> teachers =
+            // Récupérer un enseignant
+            Teacher teacher =
                     userRepository.findAllByRole(Role.TEACHER).stream()
                             .filter(u -> u instanceof Teacher)
                             .map(u -> (Teacher) u)
-                            .limit(5)
-                            .toList();
+                            .findFirst()
+                            .orElse(null);
 
-            if (teachers.isEmpty()) {
+            if (teacher == null) {
                 log.warn("⚠️ Aucun enseignant disponible, impossible de créer des cours");
                 return;
             }
 
-            Teacher teacher1 = teachers.get(0);
-            Teacher teacher2 = teachers.size() > 1 ? teachers.get(1) : teacher1;
-            Teacher teacher3 = teachers.size() > 2 ? teachers.get(2) : teacher1;
-            Teacher teacher4 = teachers.size() > 3 ? teachers.get(3) : teacher1;
+            // Cours 1 - Programmation Java
+            Course cours1 =
+                    Course.builder()
+                            .code("INFO101")
+                            .title("Programmation Java")
+                            .description("Introduction à la programmation orientée objet avec Java")
+                            .credits(6)
+                            .maxStudents(30)
+                            .status(CourseStatus.PUBLISHED)
+                            .department(info)
+                            .semester(currentSemester)
+                            .teacher(teacher)
+                            .build();
+            courseRepository.save(cours1);
 
-            // Créer des cours de démonstration
-            if (info != null) {
-                Course programmation =
-                        Course.builder()
-                                .code("INFO101")
-                                .title("Programmation Java")
-                                .description(
-                                        "Introduction à la programmation orientée objet avec Java")
-                                .credits(6)
-                                .maxStudents(30)
-                                .status(CourseStatus.PUBLISHED)
-                                .department(info)
-                                .semester(currentSemester)
-                                .teacher(teacher1)
-                                .build();
-                courseRepository.save(programmation);
+            // Cours 2 - Développement Web
+            Course cours2 =
+                    Course.builder()
+                            .code("INFO201")
+                            .title("Développement Web")
+                            .description("HTML, CSS, JavaScript et frameworks modernes")
+                            .credits(5)
+                            .maxStudents(25)
+                            .status(CourseStatus.PUBLISHED)
+                            .department(info)
+                            .semester(currentSemester)
+                            .teacher(teacher)
+                            .build();
+            courseRepository.save(cours2);
 
-                Course web =
-                        Course.builder()
-                                .code("INFO201")
-                                .title("Développement Web")
-                                .description("HTML, CSS, JavaScript et frameworks modernes")
-                                .credits(5)
-                                .maxStudents(25)
-                                .status(CourseStatus.PUBLISHED)
-                                .department(info)
-                                .semester(currentSemester)
-                                .teacher(teacher2)
-                                .build();
-                courseRepository.save(web);
+            // Cours 3 - Bases de Données
+            Course cours3 =
+                    Course.builder()
+                            .code("INFO301")
+                            .title("Bases de Données")
+                            .description("Conception et gestion de bases de données relationnelles")
+                            .credits(4)
+                            .maxStudents(30)
+                            .status(CourseStatus.PUBLISHED)
+                            .department(info)
+                            .semester(currentSemester)
+                            .teacher(teacher)
+                            .build();
+            courseRepository.save(cours3);
 
-                Course bdd =
-                        Course.builder()
-                                .code("INFO301")
-                                .title("Bases de Données")
-                                .description(
-                                        "Conception et gestion de bases de données relationnelles")
-                                .credits(4)
-                                .maxStudents(30)
-                                .status(CourseStatus.PUBLISHED)
-                                .department(info)
-                                .semester(currentSemester)
-                                .teacher(teacher3)
-                                .build();
-                courseRepository.save(bdd);
-            }
-
-            if (math != null) {
-                Course algebre =
-                        Course.builder()
-                                .code("MATH101")
-                                .title("Algèbre Linéaire")
-                                .description(
-                                        "Espaces vectoriels, matrices et transformations linéaires")
-                                .credits(6)
-                                .maxStudents(40)
-                                .status(CourseStatus.PUBLISHED)
-                                .department(math)
-                                .semester(currentSemester)
-                                .teacher(teacher2)
-                                .build();
-                courseRepository.save(algebre);
-
-                Course analyse =
-                        Course.builder()
-                                .code("MATH201")
-                                .title("Analyse Mathématique")
-                                .description("Suites, séries, intégrales et dérivées")
-                                .credits(5)
-                                .maxStudents(35)
-                                .status(CourseStatus.PUBLISHED)
-                                .department(math)
-                                .semester(currentSemester)
-                                .teacher(teacher1)
-                                .build();
-                courseRepository.save(analyse);
-            }
-
-            if (phys != null) {
-                Course mecanique =
-                        Course.builder()
-                                .code("PHYS101")
-                                .title("Mécanique Classique")
-                                .description("Cinématique, dynamique et lois de Newton")
-                                .credits(5)
-                                .maxStudents(30)
-                                .status(CourseStatus.PUBLISHED)
-                                .department(phys)
-                                .semester(currentSemester)
-                                .teacher(teacher4)
-                                .build();
-                courseRepository.save(mecanique);
-            }
-
-            if (gest != null) {
-                Course compta =
-                        Course.builder()
-                                .code("GEST101")
-                                .title("Comptabilité Générale")
-                                .description("Principes de base de la comptabilité")
-                                .credits(4)
-                                .maxStudents(40)
-                                .status(CourseStatus.PUBLISHED)
-                                .department(gest)
-                                .semester(currentSemester)
-                                .teacher(teacher3)
-                                .build();
-                courseRepository.save(compta);
-
-                Course management =
-                        Course.builder()
-                                .code("GEST201")
-                                .title("Management d'Équipe")
-                                .description("Leadership et gestion des ressources humaines")
-                                .credits(3)
-                                .maxStudents(25)
-                                .status(CourseStatus.DRAFT)
-                                .department(gest)
-                                .semester(currentSemester)
-                                .teacher(teacher4)
-                                .build();
-                courseRepository.save(management);
-            }
-
-            log.info("✅ {} cours de démonstration créés", courseRepository.count());
+            log.info("✅ 3 cours par défaut créés");
         } else {
             log.info("ℹ️ Cours déjà existants, initialisation ignorée");
         }

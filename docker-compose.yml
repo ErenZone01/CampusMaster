@@ -1,0 +1,67 @@
+services:
+  # Base de données PostgreSQL
+  postgres:
+    image: postgres:16-alpine
+    container_name: campusmaster-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: campusmaster_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: campusmaster
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - campusmaster-network
+
+  # Backend Spring Boot
+  backend:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: campusmaster-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/campusmaster_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: campusmaster
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - campusmaster-network
+
+  # Frontend Next.js
+  frontend:
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+    container_name: campusmaster-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+      NEXT_PUBLIC_USE_MOCK: "false"
+    depends_on:
+      - backend
+    networks:
+      - campusmaster-network
+
+volumes:
+  postgres_data:
+  uploads_data:
+
+networks:
+  campusmaster-network:
+    driver: bridge
