@@ -1,5 +1,5 @@
 HELP.md
-
+PLAN_INTEGRATION_ENDPOINTS.md
 # Backend (Maven)
 backend/target/
 backend/.mvn/wrapper/maven-wrapper.jar

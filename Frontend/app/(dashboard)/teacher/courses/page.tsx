@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { AuthService, CourseService } from '@/lib/mock'
+import { AuthApi } from '@/lib/api/services/auth.api'
+import { CourseApi } from '@/lib/api/services/course.api'
+import { AssignmentApi } from '@/lib/api/services/assignment.api'
 import Link from 'next/link'
 import { CourseCard } from '@/components/courses/course-card'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -65,31 +67,56 @@ export default function TeacherCoursesPage() {
 
   async function fetchCourses() {
     try {
-      const userResult = await AuthService.getCurrentUser()
-      if (!userResult.success || !userResult.data) return
+      const user = await AuthApi.getCurrentUser()
+      if (!user) return
 
-      const currentUser = userResult.data
-      const result = await CourseService.getCourses({ teacher_id: currentUser.id })
-      
-      if (!result.success || !result.data) throw new Error(result.error)
+      // Récupérer tous les cours du professeur avec pagination
+      const coursesResponse = await CourseApi.getAllCourses({
+        teacherId: user.id,
+        page: 0,
+        size: 100, // Récupérer tous les cours
+      })
 
-      const coursesData = result.data.data || []
+      const coursesData = coursesResponse.content || []
 
-      const formattedCourses = coursesData.map((course: any) => ({
-        id: course.id,
-        code: course.code,
-        name: course.name,
-        description: course.description,
-        credits: course.credits,
-        status: course.status,
-        cover_image: course.cover_image,
-        department: course.department || { name: 'Non assigné' },
-        semester: course.semester || { name: 'Non assigné' },
-        enrollment_count: course.enrollment_count || 0,
-        assignment_count: Math.floor(Math.random() * 8) + 2, // Mock 2-10 assignments
-      }))
+      // Pour chaque cours, récupérer le nombre réel d'assignments
+      const coursesWithAssignments = await Promise.all(
+        coursesData.map(async (course: any) => {
+          try {
+            const assignments = await AssignmentApi.getAssignmentsByCourse(course.id)
+            return {
+              id: course.id.toString(),
+              code: course.code,
+              name: course.title,
+              description: course.description,
+              credits: course.credits,
+              status: course.status.toLowerCase(),
+              cover_image: course.coverImage,
+              department: { name: course.departmentName },
+              semester: { name: course.semesterName },
+              enrollment_count: 0, // À implémenter avec EnrollmentApi si disponible
+              assignment_count: assignments.length,
+            }
+          } catch (error) {
+            console.error(`Error fetching assignments for course ${course.id}:`, error)
+            return {
+              id: course.id.toString(),
+              code: course.code,
+              name: course.title,
+              description: course.description,
+              credits: course.credits,
+              status: course.status.toLowerCase(),
+              cover_image: course.coverImage,
+              department: { name: course.departmentName },
+              semester: { name: course.semesterName },
+              enrollment_count: 0,
+              assignment_count: 0,
+            }
+          }
+        })
+      )
 
-      setCourses(formattedCourses)
+      setCourses(coursesWithAssignments)
     } catch (error) {
       console.error('Error fetching courses:', error)
     } finally {

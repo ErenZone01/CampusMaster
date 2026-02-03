@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { AuthService, CourseService, AssignmentService, EnrollmentService } from '@/lib/mock'
+import { CourseApi, EnrollmentApi, AssignmentApi, SubmissionApi } from '@/lib/api/services'
+import { useRequireAuth } from '@/hooks/use-auth'
 import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -44,6 +45,8 @@ interface PendingSubmission {
 }
 
 export default function TeacherDashboardPage() {
+  const { user } = useRequireAuth(['teacher'])
+  
   const [stats, setStats] = useState<TeacherStats>({
     totalCourses: 0,
     totalStudents: 0,
@@ -55,62 +58,82 @@ export default function TeacherDashboardPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchDashboardData()
-  }, [])
+    if (user) {
+      fetchDashboardData()
+    }
+  }, [user])
 
   async function fetchDashboardData() {
+    if (!user) return
+    
     try {
-      const userResult = await AuthService.getCurrentUser()
-      if (!userResult.success || !userResult.data) return
+      // Fetch courses taught by this teacher using the real API
+      const coursesResult = await CourseApi.getCoursesByTeacher(Number(user.id), 0, 100)
+      const coursesData = coursesResult.content || []
 
-      const currentUser = userResult.data
+      // Fetch assignments count and pending submissions in parallel
+      const [assignmentsCount, pendingCount] = await Promise.all([
+        AssignmentApi.countMyAssignments().catch(() => 0),
+        SubmissionApi.countPendingSubmissions().catch(() => 0)
+      ])
 
-      // Fetch courses taught by this teacher
-      const coursesResult = await CourseService.getCourses({ teacher_id: currentUser.id, status: 'published' })
-      if (!coursesResult.success) return
+      // Fetch enrollments for each course in parallel
+      const coursesWithEnrollments = await Promise.all(
+        coursesData.map(async (course: any) => {
+          try {
+            const enrollments = await EnrollmentApi.getCourseEnrollments(course.id)
+            const assignments = await AssignmentApi.getAssignmentsByCourse(course.id)
+            const pendingForCourse = assignments.reduce((sum, a) => sum + (a.pendingSubmissions || 0), 0)
+            
+            return {
+              id: String(course.id),
+              code: course.code,
+              name: course.title,
+              status: course.status?.toLowerCase() || 'draft',
+              enrollment_count: enrollments.length,
+              pending_submissions: pendingForCourse,
+            }
+          } catch (error) {
+            console.error(`Error fetching data for course ${course.id}:`, error)
+            return {
+              id: String(course.id),
+              code: course.code,
+              name: course.title,
+              status: course.status?.toLowerCase() || 'draft',
+              enrollment_count: 0,
+              pending_submissions: 0,
+            }
+          }
+        })
+      )
 
-      const coursesData = coursesResult.data?.data || []
-
-      // Mock: Calculate enrollments and pending submissions
-      const formattedCourses = coursesData.map((course: any) => ({
-        id: course.id,
-        code: course.code,
-        name: course.name,
-        status: course.status,
-        enrollment_count: Math.floor(Math.random() * 30) + 10, // Mock 10-40 students per course
-        pending_submissions: Math.floor(Math.random() * 5), // Mock 0-5 pending per course
-      }))
-
-      setCourses(formattedCourses)
+      setCourses(coursesWithEnrollments)
 
       // Calculate stats
-      const totalStudents = formattedCourses.reduce((sum: number, c: any) => sum + c.enrollment_count, 0)
-      const pendingTotal = formattedCourses.reduce((sum: number, c: any) => sum + c.pending_submissions, 0)
+      const totalStudents = coursesWithEnrollments.reduce((sum: number, c: any) => sum + c.enrollment_count, 0)
 
       setStats({
-        totalCourses: formattedCourses.length,
+        totalCourses: coursesWithEnrollments.length,
         totalStudents,
-        pendingSubmissions: pendingTotal,
-        totalAssignments: formattedCourses.length * 4, // Mock 4 assignments per course
+        pendingSubmissions: pendingCount,
+        totalAssignments: assignmentsCount,
       })
 
-      // Mock pending submissions
-      setPendingSubmissions([
-        {
-          id: '1',
-          assignment_title: 'TP 3 - Structures de données',
-          course_code: 'INFO201',
-          student_name: 'Marie Dubois',
-          submitted_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-        },
-        {
-          id: '2',
-          assignment_title: 'Projet final',
-          course_code: 'MATH301',
-          student_name: 'Pierre Martin',
-          submitted_at: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-        },
-      ])
+      // Fetch pending submissions details
+      try {
+        const pendingSubmissions = await SubmissionApi.getPendingSubmissions()
+        const formattedSubmissions = pendingSubmissions.slice(0, 5).map(sub => ({
+          id: String(sub.id),
+          assignment_title: sub.assignmentTitle,
+          course_code: sub.courseCode,
+          student_name: sub.studentName,
+          submitted_at: sub.submittedAt,
+        }))
+        setPendingSubmissions(formattedSubmissions)
+      } catch (error) {
+        console.error('Error fetching pending submissions:', error)
+        setPendingSubmissions([])
+      }
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
     } finally {

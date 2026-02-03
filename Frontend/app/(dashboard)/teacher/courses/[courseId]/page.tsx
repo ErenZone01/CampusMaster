@@ -3,17 +3,12 @@
 import React from "react"
 
 import { useState, useEffect, use } from 'react'
-import {
-  AuthService,
-  CourseService,
-  EnrollmentService,
-  MaterialService,
-  AssignmentService,
-  SubmissionService,
-  UserService,
-  DepartmentService,
-  SemesterService,
-} from '@/lib/mock'
+import { AuthApi } from '@/lib/api/services/auth.api'
+import { CourseApi } from '@/lib/api/services/course.api'
+import { AssignmentApi } from '@/lib/api/services/assignment.api'
+import { EnrollmentApi } from '@/lib/api/services/enrollment.api'
+import { DepartmentApi } from '@/lib/api/services/department.api'
+import { SemesterApi } from '@/lib/api/services/semester.api'
 import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -65,6 +60,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+const DEFAULT_COVER_IMAGE = 'https://osccdn.medcom.id/images/content/2022/12/30/3b2b09e5b381b3b59e900bc346f63892.jpg'
+
 interface CourseDetail {
   id: string
   code: string
@@ -73,6 +70,7 @@ interface CourseDetail {
   credits: number
   status: string
   schedule_info: string | null
+  cover_image: string | null
   department?: { name: string }
   semester?: { name: string }
 }
@@ -128,55 +126,46 @@ export default function TeacherCourseDetailPage({
   async function fetchCourseData() {
     try {
       // Fetch course
-      const courseResponse = await CourseService.getCourseById(courseId)
-      if (!courseResponse.data) throw new Error('Cours introuvable')
-
-      const courseData = courseResponse.data
-
-      // Fetch department and semester
-      const deptResponse = await DepartmentService.getDepartmentById(courseData.department_id)
-      const semResponse = await SemesterService.getSemesterById(courseData.semester_id)
+      const courseData = await CourseApi.getCourseById(parseInt(courseId))
 
       setCourse({
-        ...courseData,
-        department: deptResponse.data ? { name: deptResponse.data.name } : undefined,
-        semester: semResponse.data ? { name: semResponse.data.name } : undefined,
+        id: courseData.id.toString(),
+        code: courseData.code,
+        name: courseData.title,
+        description: courseData.description,
+        credits: courseData.credits,
+        status: courseData.status.toLowerCase(),
+        schedule_info: null,
+        cover_image: courseData.coverImage,
+        department: { name: courseData.departmentName },
+        semester: { name: courseData.semesterName },
       })
 
-      // Fetch enrolled students (mock data)
-      const mockStudents: Student[] = []
-      const numStudents = Math.floor(15 + Math.random() * 20)
-      for (let i = 0; i < numStudents; i++) {
-        mockStudents.push({
-          id: `student-${i}`,
-          first_name: ['Jean', 'Marie', 'Pierre', 'Sophie', 'Thomas', 'Emma'][i % 6],
-          last_name: ['Dupont', 'Martin', 'Bernard', 'Durand', 'Petit', 'Robert'][i % 6],
-          email: `student${i}@example.com`,
-          enrolled_at: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-        })
-      }
-      setStudents(mockStudents)
+      // Fetch enrolled students
+      const enrollments = await EnrollmentApi.getCourseEnrollments(parseInt(courseId))
+      setStudents(enrollments.map(e => ({
+        id: e.studentId.toString(),
+        first_name: e.studentName.split(' ')[0] || '',
+        last_name: e.studentName.split(' ').slice(1).join(' ') || '',
+        email: e.studentEmail,
+        enrolled_at: e.enrolledAt,
+      })))
 
-      // Fetch materials
-      const materialsResponse = await MaterialService.getCourseMaterials(courseId)
-      setMaterials(materialsResponse.data || [])
+      // Fetch materials - TODO: Implement MaterialApi when available
+      setMaterials([])
 
-      // Fetch assignments with submission counts
-      const assignmentsResponse = await AssignmentService.getAssignmentsByCourse(courseId)
-      const assignmentsData = assignmentsResponse.data || []
-
-      const assignmentsFormatted = await Promise.all(
-        assignmentsData.map(async (a: any) => {
-          const submissionsResponse = await SubmissionService.getSubmissions({ assignment_id: a.id })
-          const submissions = submissionsResponse.data || []
-          
-          return {
-            ...a,
-            submission_count: submissions.length,
-            graded_count: submissions.filter((s: any) => s.status === 'graded').length,
-          }
-        })
-      )
+      // Fetch assignments
+      const assignmentsData = await AssignmentApi.getAssignmentsByCourse(parseInt(courseId))
+      const assignmentsFormatted = assignmentsData.map((a: any) => ({
+        id: a.id.toString(),
+        title: a.title,
+        description: a.instructions,
+        due_date: a.dueDate,
+        max_score: 100,
+        status: 'open',
+        submission_count: a.submissionCount || 0,
+        graded_count: a.submissionCount - a.pendingSubmissions || 0,
+      }))
 
       setAssignments(assignmentsFormatted)
     } catch (error) {
@@ -191,26 +180,20 @@ export default function TeacherCourseDetailPage({
     const newStatus = course.status === 'published' ? 'draft' : 'published'
 
     try {
-      await CourseService.updateCourse(courseId, { status: newStatus })
+      await CourseApi.updateCourse(parseInt(courseId), { 
+        status: newStatus.toUpperCase() as 'DRAFT' | 'PUBLISHED' | 'ARCHIVED'
+      })
 
       setCourse({ ...course, status: newStatus })
       toast.success(newStatus === 'published' ? 'Cours publié' : 'Cours dépublié')
     } catch (error: any) {
-      toast.error(error.message)
+      toast.error(error.message || 'Erreur lors de la mise à jour')
     }
   }
 
   async function toggleMaterialVisibility(materialId: string, currentVisibility: boolean) {
-    try {
-      await MaterialService.updateMaterial(materialId, { is_visible: !currentVisibility })
-
-      setMaterials(materials.map(m => 
-        m.id === materialId ? { ...m, is_visible: !currentVisibility } : m
-      ))
-      toast.success(currentVisibility ? 'Support masqué' : 'Support visible')
-    } catch (error: any) {
-      toast.error(error.message)
-    }
+    // TODO: Implement MaterialApi when available
+    toast.info('Fonctionnalité en cours de développement')
   }
 
   function getStatusBadge(status: string) {
@@ -262,42 +245,51 @@ export default function TeacherCourseDetailPage({
       </Button>
 
       {/* Course Header */}
-      <Card>
+      <Card className="overflow-hidden">
+        {/* Cover Image Background */}
+        <div 
+          className="h-48 bg-cover bg-center relative"
+          style={{
+            backgroundImage: `url(${course.cover_image || DEFAULT_COVER_IMAGE})`,
+          }}
+        >
+          <div className="absolute inset-0 bg-linear-to-b from-black/40 via-black/50 to-black/70" />
+          <div className="absolute bottom-4 left-6 right-6 text-white">
+            <div className="flex items-center gap-2 mb-2">
+              <Badge variant="outline" className="font-mono bg-white/20 backdrop-blur-sm border-white/40 text-white">
+                {course.code}
+              </Badge>
+              <Badge className="bg-white/20 backdrop-blur-sm border-white/40 text-white">
+                {course.status === 'published' ? 'Publié' : course.status === 'draft' ? 'Brouillon' : 'Archivé'}
+              </Badge>
+            </div>
+            <CardTitle className="text-3xl text-white drop-shadow-lg">{course.name}</CardTitle>
+            <CardDescription className="text-white/90 mt-1 drop-shadow">
+              {course.department?.name} • {course.semester?.name} • {course.credits} crédits
+            </CardDescription>
+          </div>
+        </div>
         <CardHeader>
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="font-mono">
-                  {course.code}
-                </Badge>
-                {getStatusBadge(course.status)}
-              </div>
-              <CardTitle className="text-2xl">{course.name}</CardTitle>
-              <CardDescription>
-                {course.department?.name} • {course.semester?.name} • {course.credits} crédits
-              </CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={toggleCourseStatus}>
-                {course.status === 'published' ? (
-                  <>
-                    <EyeOff className="mr-2 h-4 w-4" />
-                    Dépublier
-                  </>
-                ) : (
-                  <>
-                    <Eye className="mr-2 h-4 w-4" />
-                    Publier
-                  </>
-                )}
-              </Button>
-              <Button variant="outline" asChild>
-                <Link href={`/teacher/courses/${courseId}/edit`}>
-                  <Edit className="mr-2 h-4 w-4" />
-                  Modifier
-                </Link>
-              </Button>
-            </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={toggleCourseStatus}>
+              {course.status === 'published' ? (
+                <>
+                  <EyeOff className="mr-2 h-4 w-4" />
+                  Dépublier
+                </>
+              ) : (
+                <>
+                  <Eye className="mr-2 h-4 w-4" />
+                  Publier
+                </>
+              )}
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href={`/teacher/courses/${courseId}/edit`}>
+                <Edit className="mr-2 h-4 w-4" />
+                Modifier
+              </Link>
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -574,23 +566,15 @@ function AddMaterialDialog({
     setSubmitting(true)
 
     try {
-      const currentUserResponse = await AuthService.getCurrentUser()
-      if (!currentUserResponse?.data) throw new Error('Non authentifié')
-      const currentUser = currentUserResponse.data
+      const currentUser = await AuthApi.getCurrentUser()
+      if (!currentUser) throw new Error('Non authentifié')
 
-      await MaterialService.createMaterial({
-        course_id: courseId,
-        title: formData.title,
-        description: formData.description || undefined,
-        type: formData.type,
-        file_url: formData.external_url || undefined,
-      })
-
-      toast.success('Support ajouté')
+      // TODO: Implémenter MaterialApi quand disponible
+      toast.info('Fonctionnalité en cours de développement')
       setFormData({ title: '', description: '', type: 'document', external_url: '' })
       onSuccess()
     } catch (error: any) {
-      toast.error(error.message)
+      toast.error(error.message || 'Erreur lors de l\'ajout')
     } finally {
       setSubmitting(false)
     }
@@ -690,19 +674,18 @@ function AddAssignmentDialog({
     setSubmitting(true)
 
     try {
-      await AssignmentService.createAssignment({
-        course_id: courseId,
+      await AssignmentApi.createAssignment({
         title: formData.title,
-        description: formData.description || undefined,
-        due_date: new Date(formData.due_date).toISOString(),
-        max_score: parseFloat(formData.max_score),
+        instructions: formData.description || '',
+        dueDate: new Date(formData.due_date).toISOString(),
+        courseId: parseInt(courseId),
       })
 
       toast.success('Devoir créé')
       setFormData({ title: '', description: '', instructions: '', due_date: '', max_score: '100', weight: '1' })
       onSuccess()
     } catch (error: any) {
-      toast.error(error.message)
+      toast.error(error.message || 'Erreur lors de la création')
     } finally {
       setSubmitting(false)
     }

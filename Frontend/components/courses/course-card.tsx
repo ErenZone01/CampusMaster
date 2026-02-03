@@ -33,20 +33,13 @@ const statusColors: Record<CourseStatus, string> = {
   archived: "bg-muted text-muted-foreground",
 };
 
-// Images de fond pour les cours (Unsplash)
-const courseImages = [
-  "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=400&h=200&fit=crop",
-  "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=400&h=200&fit=crop",
-  "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=400&h=200&fit=crop",
-  "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=400&h=200&fit=crop",
-  "https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=400&h=200&fit=crop",
-  "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=400&h=200&fit=crop",
-];
+
+
+const DEFAULT_COVER_IMAGE = 'https://osccdn.medcom.id/images/content/2022/12/30/3b2b09e5b381b3b59e900bc346f63892.jpg'
 
 function getImageForCourse(id: string): string {
-  // Utiliser l'ID pour déterminer l'image de manière consistante
-  const hash = id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  return courseImages[hash % courseImages.length];
+  // Utiliser l'image par défaut
+  return DEFAULT_COVER_IMAGE
 }
 
 export function CourseCard({

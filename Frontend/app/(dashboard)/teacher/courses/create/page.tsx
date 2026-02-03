@@ -4,7 +4,10 @@ import React from "react"
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { AuthService, CourseService, DepartmentService, SemesterService } from '@/lib/mock'
+import { AuthApi } from '@/lib/api/services/auth.api'
+import { CourseApi } from '@/lib/api/services/course.api'
+import { DepartmentApi } from '@/lib/api/services/department.api'
+import { SemesterApi } from '@/lib/api/services/semester.api'
 import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -57,24 +60,31 @@ export default function CreateCoursePage() {
 
   async function fetchOptions() {
     try {
-      const [deptsResponse, semsResponse] = await Promise.all([
-        DepartmentService.getDepartments(),
-        SemesterService.getSemesters(),
+      const [departments, semesters] = await Promise.all([
+        DepartmentApi.getDepartments(),
+        SemesterApi.getSemesters(),
       ])
 
-      const depts = deptsResponse.data || []
-      const sems = semsResponse.data || []
+      setDepartments(departments.map((d: any) => ({
+        id: d.id.toString(),
+        name: d.name,
+        code: d.code,
+      })))
 
-      setDepartments(depts)
-      setSemesters(sems)
+      setSemesters(semesters.map((s: any) => ({
+        id: s.id.toString(),
+        name: s.name,
+        code: s.code,
+      })))
 
       // Auto-select current semester
-      const current = sems?.find((s: any) => s.is_current)
+      const current = semesters.find((s: any) => s.isCurrent)
       if (current) {
-        setFormData(prev => ({ ...prev, semester_id: current.id }))
+        setFormData(prev => ({ ...prev, semester_id: current.id.toString() }))
       }
     } catch (error) {
       console.error('Error fetching options:', error)
+      toast.error('Erreur lors du chargement des options')
     } finally {
       setLoading(false)
     }
@@ -85,28 +95,26 @@ export default function CreateCoursePage() {
     setSubmitting(true)
 
     try {
-      const currentUserResponse = await AuthService.getCurrentUser()
-      if (!currentUserResponse?.data) throw new Error('Non authentifié')
-      const currentUser = currentUserResponse.data
+      const currentUser = await AuthApi.getCurrentUser()
+      if (!currentUser || !currentUser.id) throw new Error('Non authentifié')
 
-      await CourseService.createCourse({
+      await CourseApi.createCourse({
         code: formData.code,
-        name: formData.name,
+        title: formData.name,
         description: formData.description || undefined,
         credits: parseInt(formData.credits),
-        department_id: formData.department_id,
-        semester_id: formData.semester_id,
-        teacher_id: currentUser.id,
-        max_students: formData.max_students ? parseInt(formData.max_students) : undefined,
-        schedule_info: formData.schedule_info || undefined,
-        cover_image: formData.cover_image || undefined,
-        status: 'draft',
+        departmentId: parseInt(formData.department_id),
+        semesterId: parseInt(formData.semester_id),
+        teacherId: currentUser.id,
+        maxStudents: formData.max_students ? parseInt(formData.max_students) : undefined,
+        coverImage: formData.cover_image || undefined,
       })
 
       toast.success('Cours créé avec succès')
       router.push('/teacher/courses')
     } catch (error: any) {
-      toast.error(error.message || 'Erreur lors de la création')
+      console.error('Error creating course:', error)
+      toast.error(error.message || 'Erreur lors de la création du cours')
     } finally {
       setSubmitting(false)
     }
