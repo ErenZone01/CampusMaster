@@ -385,7 +385,7 @@ export default function StudentAssignmentsPage() {
       {/* File Preview Dialog */}
       <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader className="flex-shrink-0">
+          <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
               {previewFile?.title}

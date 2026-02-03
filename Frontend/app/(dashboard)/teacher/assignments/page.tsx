@@ -316,7 +316,7 @@ export default function TeacherAssignmentsPage() {
               Nouveau devoir
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-150 max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Créer un devoir</DialogTitle>
               <DialogDescription>
@@ -622,7 +622,7 @@ export default function TeacherAssignmentsPage() {
         setIsEditModalOpen(open)
         if (!open) resetForm()
       }}>
-        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-150 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Modifier le devoir</DialogTitle>
             <DialogDescription>
