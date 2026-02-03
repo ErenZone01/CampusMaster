@@ -18,5 +18,7 @@ public interface StudentRepository {
 
     Optional<Student> findById(Long id);
 
+    java.util.List<Student> findByValidated(boolean validated);
+
     void deleteById(Long id);
 }

@@ -63,4 +63,9 @@ public class AdminServiceImpl implements AdminService {
                 .role(teacher.getRole())
                 .build();
     }
+
+    @Override
+    public void deleteAccount(Long id) {
+        userRepository.deleteById(id);
+    }
 }
