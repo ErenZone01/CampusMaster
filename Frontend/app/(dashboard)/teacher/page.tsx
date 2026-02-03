@@ -67,23 +67,30 @@ export default function TeacherDashboardPage() {
     if (!user) return
     
     try {
-      // Fetch courses taught by this teacher using the real API
-      const coursesResult = await CourseApi.getCoursesByTeacher(Number(user.id), 0, 100)
-      const coursesData = coursesResult.content || []
+      // Fetch courses taught by this teacher using getMyCourses
+      const coursesData = await CourseApi.getMyCourses()
 
       // Fetch assignments count and pending submissions in parallel
-      const [assignmentsCount, pendingCount] = await Promise.all([
+      const [assignmentsCount, pendingCount, pendingSubmissionsList] = await Promise.all([
         AssignmentApi.countMyAssignments().catch(() => 0),
-        SubmissionApi.countPendingSubmissions().catch(() => 0)
+        SubmissionApi.countPendingSubmissions().catch(() => 0),
+        SubmissionApi.getPendingSubmissions().catch(() => [])
       ])
 
       // Fetch enrollments for each course in parallel
+      let totalStudents = 0
       const coursesWithEnrollments = await Promise.all(
-        coursesData.map(async (course: any) => {
+        coursesData.map(async (course) => {
           try {
             const enrollments = await EnrollmentApi.getCourseEnrollments(course.id)
             const assignments = await AssignmentApi.getAssignmentsByCourse(course.id)
-            const pendingForCourse = assignments.reduce((sum, a) => sum + (a.pendingSubmissions || 0), 0)
+            
+            // Count pending submissions for this course
+            const pendingForCourse = pendingSubmissionsList.filter(
+              sub => sub.courseId === course.id
+            ).length
+            
+            totalStudents += enrollments.length
             
             return {
               id: String(course.id),
@@ -109,9 +116,6 @@ export default function TeacherDashboardPage() {
 
       setCourses(coursesWithEnrollments)
 
-      // Calculate stats
-      const totalStudents = coursesWithEnrollments.reduce((sum: number, c: any) => sum + c.enrollment_count, 0)
-
       setStats({
         totalCourses: coursesWithEnrollments.length,
         totalStudents,
@@ -119,21 +123,15 @@ export default function TeacherDashboardPage() {
         totalAssignments: assignmentsCount,
       })
 
-      // Fetch pending submissions details
-      try {
-        const pendingSubmissions = await SubmissionApi.getPendingSubmissions()
-        const formattedSubmissions = pendingSubmissions.slice(0, 5).map(sub => ({
-          id: String(sub.id),
-          assignment_title: sub.assignmentTitle,
-          course_code: sub.courseCode,
-          student_name: sub.studentName,
-          submitted_at: sub.submittedAt,
-        }))
-        setPendingSubmissions(formattedSubmissions)
-      } catch (error) {
-        console.error('Error fetching pending submissions:', error)
-        setPendingSubmissions([])
-      }
+      // Format pending submissions for display
+      const formattedSubmissions = pendingSubmissionsList.slice(0, 5).map(sub => ({
+        id: String(sub.id),
+        assignment_title: sub.assignmentTitle,
+        course_code: sub.courseCode,
+        student_name: sub.studentName,
+        submitted_at: sub.submittedAt,
+      }))
+      setPendingSubmissions(formattedSubmissions)
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
     } finally {

@@ -1,10 +1,8 @@
 package com.campusmaster.campusmaster.application.dto;
 
-import java.time.LocalDateTime;
-
 import com.campusmaster.campusmaster.domain.model.course.Enrollment;
 import com.campusmaster.campusmaster.domain.model.course.EnrollmentStatus;
-
+import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -29,7 +27,10 @@ public class EnrollmentResponse {
         return EnrollmentResponse.builder()
                 .id(enrollment.getId())
                 .studentId(enrollment.getStudent().getId())
-                .studentName(enrollment.getStudent().getFirstName() + " " + enrollment.getStudent().getLastName())
+                .studentName(
+                        enrollment.getStudent().getFirstName()
+                                + " "
+                                + enrollment.getStudent().getLastName())
                 .studentEmail(enrollment.getStudent().getEmail())
                 .courseId(enrollment.getCourse().getId())
                 .courseCode(enrollment.getCourse().getCode())

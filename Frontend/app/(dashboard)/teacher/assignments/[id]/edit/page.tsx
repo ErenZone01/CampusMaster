@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { AuthService, CourseService, AssignmentService } from '@/lib/mock'
-import { useRequireAuth } from '@/hooks/use-auth'
+import { useState, useEffect, useRef } from 'react'
+import { CourseApi, CourseResponse } from '@/lib/api/services/course.api'
+import { AssignmentApi, AssignmentResponse, UpdateAssignmentRequest } from '@/lib/api/services/assignment.api'
+import { FileApi } from '@/lib/api/services/file.api'
 import { useParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -10,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { toast } from 'sonner'
 import {
   Select,
   SelectContent,
@@ -17,39 +19,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, Upload, X, FileText, Eye, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 
-interface Course {
-  id: string
-  code: string
-  name: string
-}
-
-interface Assignment {
-  id: string
-  title: string
-  description: string
-  course_id: string
-  due_date: string
-}
-
 export default function EditAssignmentPage() {
-  useRequireAuth(['teacher'])
-
   const params = useParams()
   const router = useRouter()
-  const assignmentId = params.id as string
+  const assignmentId = parseInt(params.id as string)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [courses, setCourses] = useState<Course[]>([])
-  const [assignment, setAssignment] = useState<Assignment | null>(null)
+  const [courses, setCourses] = useState<CourseResponse[]>([])
+  const [assignment, setAssignment] = useState<AssignmentResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [uploadingFile, setUploadingFile] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [currentFilePath, setCurrentFilePath] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     title: '',
-    description: '',
-    course_id: '',
-    due_date: '',
+    instructions: '',
+    courseId: '',
+    dueDate: '',
   })
 
   useEffect(() => {
@@ -58,38 +48,53 @@ export default function EditAssignmentPage() {
 
   const fetchData = async () => {
     try {
-      const currentUserResponse = await AuthService.getCurrentUser()
-      if (!currentUserResponse?.data) return
-      const currentUser = currentUserResponse.data
-
-      // Fetch courses
-      const coursesResponse = await CourseService.getCourses({ teacher_id: currentUser.id })
-      const coursesData = Array.isArray(coursesResponse.data) ? coursesResponse.data : coursesResponse.data?.data || []
-      setCourses(coursesData)
+      // Fetch courses assigned to this teacher
+      const coursesResponse = await CourseApi.getMyCourses()
+      setCourses(coursesResponse || [])
 
       // Fetch assignment
-      const assignmentResponse = await AssignmentService.getAssignmentById(assignmentId)
-      if (!assignmentResponse.data) throw new Error('Devoir introuvable')
+      const assignmentData = await AssignmentApi.getAssignmentById(assignmentId)
+      setAssignment(assignmentData)
+      setCurrentFilePath(assignmentData.filePath || null)
       
-      const assignmentData = assignmentResponse.data
-      setAssignment({
-        id: assignmentData.id,
-        title: assignmentData.title,
-        description: assignmentData.description || '',
-        course_id: assignmentData.course_id,
-        due_date: assignmentData.due_date,
-      })
+      // Format date for datetime-local input
+      const dueDate = new Date(assignmentData.dueDate)
+      const formattedDueDate = dueDate.toISOString().slice(0, 16)
+      
       setFormData({
         title: assignmentData.title,
-        description: assignmentData.description || '',
-        course_id: assignmentData.course_id,
-        due_date: assignmentData.due_date,
+        instructions: assignmentData.instructions || '',
+        courseId: assignmentData.courseId.toString(),
+        dueDate: formattedDueDate,
       })
     } catch (error) {
       console.error('Error fetching data:', error)
+      toast.error('Erreur lors du chargement du devoir')
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      if (file.size > 100 * 1024 * 1024) {
+        toast.error('Le fichier est trop volumineux (max 100MB)')
+        return
+      }
+      setSelectedFile(file)
+    }
+  }
+
+  const removeFile = () => {
+    setSelectedFile(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const removeCurrentFile = () => {
+    setCurrentFilePath(null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -97,17 +102,32 @@ export default function EditAssignmentPage() {
     setSaving(true)
 
     try {
-      await AssignmentService.updateAssignment(assignmentId, {
-        title: formData.title,
-        description: formData.description,
-        due_date: formData.due_date,
-      })
+      let filePath: string | undefined = currentFilePath || undefined
 
+      // Upload new file if selected
+      if (selectedFile) {
+        setUploadingFile(true)
+        const uploadResponse = await FileApi.uploadFile(selectedFile)
+        filePath = uploadResponse.filePath
+        setUploadingFile(false)
+      }
+
+      const request: UpdateAssignmentRequest = {
+        title: formData.title,
+        instructions: formData.instructions,
+        dueDate: formData.dueDate,
+        filePath: filePath,
+      }
+
+      await AssignmentApi.updateAssignment(assignmentId, request)
+      toast.success('Devoir modifié avec succès')
       router.push('/teacher/assignments')
     } catch (error) {
       console.error('Error updating assignment:', error)
+      toast.error('Erreur lors de la modification du devoir')
     } finally {
       setSaving(false)
+      setUploadingFile(false)
     }
   }
 
@@ -141,25 +161,26 @@ export default function EditAssignmentPage() {
 
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Course Selection */}
+            {/* Course (read-only) */}
             <div>
               <Label htmlFor="course" className="text-base mb-2 block">
                 Cours
               </Label>
-              <Select value={formData.course_id} onValueChange={(value) =>
-                setFormData({ ...formData, course_id: value })
-              }>
+              <Select value={formData.courseId} disabled>
                 <SelectTrigger>
                   <SelectValue placeholder="Sélectionnez un cours" />
                 </SelectTrigger>
                 <SelectContent>
                   {courses.map(course => (
-                    <SelectItem key={course.id} value={course.id}>
-                      {course.code} - {course.name}
+                    <SelectItem key={course.id} value={course.id.toString()}>
+                      {course.code} - {course.title}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-sm text-muted-foreground mt-1">
+                Le cours ne peut pas être modifié
+              </p>
             </div>
 
             {/* Title */}
@@ -176,15 +197,15 @@ export default function EditAssignmentPage() {
               />
             </div>
 
-            {/* Description */}
+            {/* Instructions */}
             <div>
-              <Label htmlFor="description" className="text-base mb-2 block">
-                Description
+              <Label htmlFor="instructions" className="text-base mb-2 block">
+                Instructions
               </Label>
               <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                id="instructions"
+                value={formData.instructions}
+                onChange={(e) => setFormData({ ...formData, instructions: e.target.value })}
                 placeholder="Décrivez le devoir, les attentes, les consignes..."
                 className="min-h-32"
                 required
@@ -193,23 +214,106 @@ export default function EditAssignmentPage() {
 
             {/* Due Date */}
             <div>
-              <Label htmlFor="due_date" className="text-base mb-2 block">
+              <Label htmlFor="dueDate" className="text-base mb-2 block">
                 Date limite de remise
               </Label>
               <Input
-                id="due_date"
+                id="dueDate"
                 type="datetime-local"
-                value={formData.due_date}
-                onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+                value={formData.dueDate}
+                onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
                 required
               />
             </div>
 
+            {/* File Upload */}
+            <div>
+              <Label className="text-base mb-2 block">
+                Document (optionnel)
+              </Label>
+              
+              {/* Current file */}
+              {currentFilePath && !selectedFile && (
+                <div className="flex items-center gap-3 p-3 border rounded-md bg-muted/50 mb-2">
+                  <FileText className="h-8 w-8 text-primary" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium">Document actuel</p>
+                    <p className="text-sm text-muted-foreground truncate">
+                      {currentFilePath.split('/').pop()}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    asChild
+                  >
+                    <a
+                      href={currentFilePath.startsWith('http') ? currentFilePath : `http://localhost:8080${currentFilePath}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Eye className="h-4 w-4 mr-2" />
+                      Voir
+                    </a>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={removeCurrentFile}
+                    className="text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+
+              {/* New file selection */}
+              {!selectedFile ? (
+                <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.zip,.rar"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    {currentFilePath ? 'Remplacer le fichier' : 'Sélectionner un fichier'}
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 p-3 border rounded-md bg-green-50 dark:bg-green-950">
+                  <FileText className="h-8 w-8 text-green-600" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">{selectedFile.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Nouveau fichier • {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={removeFile}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+
             {/* Submit Button */}
             <div className="flex gap-3">
-              <Button type="submit" disabled={saving} className="flex-1">
+              <Button type="submit" disabled={saving || uploadingFile} className="flex-1">
                 <Save className="mr-2 h-4 w-4" />
-                {saving ? 'Enregistrement...' : 'Enregistrer les modifications'}
+                {uploadingFile ? 'Upload du fichier...' : saving ? 'Enregistrement...' : 'Enregistrer les modifications'}
               </Button>
               <Link href="/teacher/assignments" className="flex-1">
                 <Button type="button" variant="outline" className="w-full">

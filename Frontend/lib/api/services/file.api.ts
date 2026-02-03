@@ -4,7 +4,9 @@ export class FileApi {
     formData.append('file', file)
 
     const token = localStorage.getItem('token')
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/files/upload/${folder}`, {
+    const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+    
+    const response = await fetch(`${baseURL}/api/files/upload/${folder}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -13,10 +15,13 @@ export class FileApi {
     })
 
     if (!response.ok) {
-      throw new Error('Upload failed')
+      const error = await response.text()
+      throw new Error(error || 'Upload failed')
     }
 
-    const { url } = await response.json()
-    return url
+    const data = await response.json()
+    
+    // Retourner l'URL complète du fichier
+    return data.url || data.filename
   }
 }

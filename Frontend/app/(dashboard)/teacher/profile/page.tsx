@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { AuthService, UserService, CourseService, EnrollmentService } from '@/lib/mock'
 import { useRequireAuth } from '@/hooks/use-auth'
+import { UserApi, CourseApi, EnrollmentApi } from '@/lib/api/services'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,67 +10,68 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useToast } from '@/hooks/use-toast'
-import { Edit, Save, X, BookOpen, Users } from 'lucide-react'
+import { Edit, Save, X, BookOpen, Users, Upload, GraduationCap } from 'lucide-react'
 
 interface TeacherProfile {
-  id: string
-  full_name: string
+  id: string | number
+  firstName: string
+  lastName: string
   email: string
-  phone: string
-  bio: string
-  avatar_url: string
-  department: string
-  courses_count: number
-  students_count: number
+  role: string
+  avatarUrl?: string
+  departmentName?: string
+  coursesCount: number
+  studentsCount: number
 }
 
 export default function TeacherProfilePage() {
-  useRequireAuth(['teacher'])
+  const { user, isLoading: authLoading, refreshUser } = useRequireAuth(['teacher'])
 
   const [profile, setProfile] = useState<TeacherProfile | null>(null)
   const [editingProfile, setEditingProfile] = useState<TeacherProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
-    fetchProfile()
-  }, [])
+    if (!authLoading && user) {
+      fetchProfile()
+    }
+  }, [authLoading, user])
 
   const fetchProfile = async () => {
+    if (!user) return
+
     try {
-      const currentUserResponse = await AuthService.getCurrentUser()
-      if (!currentUserResponse?.data) return
-      const currentUser = currentUserResponse.data
-
-      const userProfile = await UserService.getUserById(currentUser.id)
-      if (!userProfile.data) throw new Error('Profil introuvable')
-
-      // Get teacher's courses
-      const coursesResponse = await CourseService.getCourses({ teacher_id: currentUser.id })
-      const courses = Array.isArray(coursesResponse.data) ? coursesResponse.data : coursesResponse.data?.data || []
-
-      // Get total unique students from enrollments (mock data)
-      const studentIds = new Set()
-      courses.forEach(() => {
-        // Mock: each course has 20-40 students
-        const numStudents = Math.floor(20 + Math.random() * 20)
-        for (let i = 0; i < numStudents; i++) {
-          studentIds.add(`student-${Math.random()}`)
+      // Récupérer les cours de l'enseignant
+      const coursesResult = await CourseApi.getMyCourses()
+      
+      // Compter les étudiants uniques dans tous les cours
+      let totalStudents = 0
+      for (const course of coursesResult) {
+        try {
+          const enrollments = await EnrollmentApi.getCourseEnrollments(course.id)
+          totalStudents += enrollments.length
+        } catch (error) {
+          console.error(`Error fetching enrollments for course ${course.id}:`, error)
         }
-      })
+      }
+
+      // Récupérer le nom du département depuis le premier cours
+      const departmentName = coursesResult.length > 0 ? coursesResult[0].departmentName : ''
 
       const teacherProfile: TeacherProfile = {
-        id: userProfile.data.id,
-        full_name: `${userProfile.data.first_name || ''} ${userProfile.data.last_name || ''}`.trim(),
-        email: userProfile.data.email || '',
-        phone: '',
-        bio: '',
-        avatar_url: userProfile.data.avatar_url || '',
-        department: userProfile.data.department_id || '',
-        courses_count: courses.length,
-        students_count: studentIds.size,
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        role: user.role,
+        avatarUrl: user.avatarUrl || '',
+        departmentName: departmentName,
+        coursesCount: coursesResult.length,
+        studentsCount: totalStudents,
       }
 
       setProfile(teacherProfile)
@@ -87,23 +88,27 @@ export default function TeacherProfilePage() {
   }
 
   const handleSaveProfile = async () => {
-    if (!editingProfile) return
+    if (!editingProfile || !user) return
 
     setSaving(true)
     try {
-      await UserService.updateUser(editingProfile.id, {
-        avatar_url: editingProfile.avatar_url,
+      await UserApi.updateUser(String(user.id), {
+        firstName: editingProfile.firstName,
+        lastName: editingProfile.lastName,
       })
 
-      setProfile(editingProfile)
+      // Refresh user data in auth context
+      await refreshUser()
+
+      setProfile({ ...profile!, ...editingProfile })
       setIsEditing(false)
       toast({
         description: 'Profil mis à jour avec succès',
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving profile:', error)
       toast({
-        description: 'Erreur lors de la mise à jour du profil',
+        description: error.response?.data?.message || 'Erreur lors de la mise à jour du profil',
         variant: 'destructive',
       })
     } finally {
@@ -111,7 +116,79 @@ export default function TeacherProfilePage() {
     }
   }
 
-  if (loading) {
+  const handleUploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !editingProfile || !user) return
+
+    // Validate file type and size
+    if (!file.type.startsWith('image/')) {
+      toast({
+        description: 'Veuillez sélectionner une image valide',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        description: 'La taille du fichier ne doit pas dépasser 5 MB',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const token = localStorage.getItem('token')
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/files/upload/avatars`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error('Upload failed')
+      }
+
+      const { url } = await response.json()
+      
+      // Update avatar URL in backend
+      await UserApi.updateUser(String(user.id), {
+        avatarUrl: url,
+      })
+      
+      // Refresh user data in auth context to update header
+      await refreshUser()
+      
+      // Update local profile state with new avatar
+      const updatedProfile = {
+        ...editingProfile,
+        avatarUrl: url,
+      }
+      
+      setEditingProfile(updatedProfile)
+      setProfile(updatedProfile)
+
+      toast({
+        description: 'Photo de profil téléchargée avec succès',
+      })
+    } catch (error: any) {
+      console.error('Error uploading avatar:', error)
+      toast({
+        description: error.message || 'Erreur lors du téléchargement',
+        variant: 'destructive',
+      })
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  if (loading || authLoading) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-48" />
@@ -127,11 +204,19 @@ export default function TeacherProfilePage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Mon profil</h1>
-          <p className="text-muted-foreground">
-            Gérez vos informations personnelles
-          </p>
+        <div className="flex items-center gap-4">
+          <Avatar className="h-16 w-16">
+            <AvatarImage src={editingProfile?.avatarUrl} />
+            <AvatarFallback className="bg-primary text-primary-foreground text-lg">
+              {editingProfile?.firstName?.[0]}{editingProfile?.lastName?.[0]}
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Mon profil</h1>
+            <p className="text-muted-foreground">
+              Gérez vos informations personnelles
+            </p>
+          </div>
         </div>
         {!isEditing ? (
           <Button onClick={() => setIsEditing(true)}>
@@ -164,41 +249,57 @@ export default function TeacherProfilePage() {
           {/* Avatar Section */}
           <div className="flex items-center gap-6">
             <Avatar className="h-24 w-24">
-              <AvatarImage src={editingProfile?.avatar_url} />
-              <AvatarFallback>
-                {editingProfile?.full_name
-                  ?.split(' ')
-                  .map(n => n[0])
-                  .join('')}
+              <AvatarImage src={editingProfile?.avatarUrl} />
+              <AvatarFallback className="bg-primary text-primary-foreground">
+                {editingProfile?.firstName?.[0]}{editingProfile?.lastName?.[0]}
               </AvatarFallback>
             </Avatar>
-            <div className="flex-1 space-y-2">
-              <Label htmlFor="avatar_url">Photo de profil (URL)</Label>
-              <Input
-                id="avatar_url"
-                value={editingProfile?.avatar_url || ''}
-                onChange={(e) =>
-                  setEditingProfile({
-                    ...editingProfile!,
-                    avatar_url: e.target.value,
-                  })
-                }
-                disabled={!isEditing}
-              />
-            </div>
+            {isEditing && (
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="avatar_file">Photo de profil</Label>
+                <div className="flex gap-2 items-center">
+                  <Input
+                    id="avatar_file"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleUploadAvatar}
+                    disabled={uploading}
+                    className="flex-1"
+                  />
+                  {uploading && (
+                    <span className="text-sm text-muted-foreground">Téléchargement...</span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Form Fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <Label htmlFor="full_name">Nom complet</Label>
+              <Label htmlFor="firstName">Prénom</Label>
               <Input
-                id="full_name"
-                value={editingProfile?.full_name || ''}
+                id="firstName"
+                value={editingProfile?.firstName || ''}
                 onChange={(e) =>
                   setEditingProfile({
                     ...editingProfile!,
-                    full_name: e.target.value,
+                    firstName: e.target.value,
+                  })
+                }
+                disabled={!isEditing}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="lastName">Nom</Label>
+              <Input
+                id="lastName"
+                value={editingProfile?.lastName || ''}
+                onChange={(e) =>
+                  setEditingProfile({
+                    ...editingProfile!,
+                    lastName: e.target.value,
                   })
                 }
                 disabled={!isEditing}
@@ -216,72 +317,62 @@ export default function TeacherProfilePage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="phone">Téléphone</Label>
+              <Label htmlFor="department">Département</Label>
               <Input
-                id="phone"
-                value={editingProfile?.phone || ''}
-                onChange={(e) =>
-                  setEditingProfile({
-                    ...editingProfile!,
-                    phone: e.target.value,
-                  })
-                }
-                disabled={!isEditing}
+                id="department"
+                value={editingProfile?.departmentName || 'Non assigné'}
+                disabled
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="department">Département</Label>
+              <Label htmlFor="role">Rôle</Label>
               <Input
-                id="department"
-                value={editingProfile?.department || ''}
+                id="role"
+                value="Enseignant"
                 disabled
               />
             </div>
           </div>
+        </CardContent>
+      </Card>
 
-          <div className="space-y-2">
-            <Label htmlFor="bio">Biographie</Label>
-            <textarea
-              id="bio"
-              value={editingProfile?.bio || ''}
-              onChange={(e) =>
-                setEditingProfile({
-                  ...editingProfile!,
-                  bio: e.target.value,
-                })
-              }
-              disabled={!isEditing}
-              className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            />
+      {/* Teacher Info */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <GraduationCap className="h-5 w-5" />
+            Informations enseignant
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4 text-sm">
+            <p className="text-muted-foreground">
+              Vous avez accès à la gestion de vos cours, devoirs et notes des étudiants.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="font-semibold">Gestion des cours</p>
+                <p className="text-muted-foreground text-xs">Accéder et gérer vos modules</p>
+              </div>
+              <div>
+                <p className="font-semibold">Devoirs</p>
+                <p className="text-muted-foreground text-xs">Créer et gérer les devoirs</p>
+              </div>
+              <div>
+                <p className="font-semibold">Corrections</p>
+                <p className="text-muted-foreground text-xs">Corriger les soumissions</p>
+              </div>
+              <div>
+                <p className="font-semibold">Notes</p>
+                <p className="text-muted-foreground text-xs">Attribuer les notes aux étudiants</p>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Cours enseignés</CardTitle>
-            <BookOpen className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{profile.courses_count}</div>
-            <p className="text-xs text-muted-foreground">cours actifs</p>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Étudiants</CardTitle>
-            <Users className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{profile.students_count}</div>
-            <p className="text-xs text-muted-foreground">étudiants inscrits</p>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   )
 }

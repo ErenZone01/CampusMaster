@@ -13,10 +13,7 @@ import lombok.Setter;
 @NoArgsConstructor
 @Builder
 public class CreateDepartmentRequest {
-    @NotBlank
-    private String name;
+    @NotBlank private String name;
 
-    @NotBlank
-    private String code;
-
+    @NotBlank private String code;
 }

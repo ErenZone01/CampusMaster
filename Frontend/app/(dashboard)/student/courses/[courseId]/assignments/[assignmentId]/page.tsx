@@ -2,21 +2,28 @@
 
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
+import { useRequireAuth } from '@/hooks/use-auth'
 import {
-  AuthService,
-  AssignmentService,
-  SubmissionService,
-  GradeService,
-  CourseService,
-} from '@/lib/mock'
+  AssignmentApi,
+  SubmissionApi,
+  CourseApi,
+  type AssignmentResponse,
+  type SubmissionResponse,
+  type CourseResponse,
+} from '@/lib/api/services'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,39 +45,12 @@ import {
   Download,
   Star,
   BookOpen,
+  Eye,
+  Paperclip,
+  Pencil,
+  Trash2,
 } from 'lucide-react'
 import Link from 'next/link'
-
-interface Assignment {
-  id: string
-  title: string
-  description: string | null
-  due_date: string
-  max_score: number
-  course_id: string
-}
-
-interface Course {
-  code: string
-  name: string
-}
-
-interface Submission {
-  id: string
-  submission_text: string | null
-  file_url: string | null
-  submitted_at: string
-  status: 'submitted' | 'graded'
-  grade: number | null
-  feedback: string | null
-  graded_at: string | null
-}
-
-interface Grade {
-  score: number
-  feedback: string | null
-  graded_at: string
-}
 
 export default function StudentAssignmentDetailPage({
   params,
@@ -79,71 +59,76 @@ export default function StudentAssignmentDetailPage({
 }) {
   const { courseId, assignmentId } = use(params)
   const router = useRouter()
-  const [assignment, setAssignment] = useState<Assignment | null>(null)
-  const [course, setCourse] = useState<Course | null>(null)
-  const [submission, setSubmission] = useState<Submission | null>(null)
-  const [grade, setGrade] = useState<Grade | null>(null)
+  const { user, isLoading: authLoading } = useRequireAuth(['student'])
+
+  const [assignment, setAssignment] = useState<AssignmentResponse | null>(null)
+  const [course, setCourse] = useState<CourseResponse | null>(null)
+  const [submission, setSubmission] = useState<SubmissionResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [showSubmitDialog, setShowSubmitDialog] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [showEditDialog, setShowEditDialog] = useState(false)
+  const [canModify, setCanModify] = useState(false)
+  const [previewFile, setPreviewFile] = useState<{ url: string; title: string } | null>(null)
 
   // Form state
-  const [content, setContent] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [error, setError] = useState('')
 
+  // Helper function to get file URL
+  const getFileUrl = (filePath: string) => {
+    if (!filePath) return ''
+    if (filePath.startsWith('http')) return filePath
+    // Add /api/files/ prefix if not present
+    const path = filePath.startsWith('/') ? filePath : `/${filePath}`
+    const apiPath = path.startsWith('/api/files') ? path : `/api/files${path}`
+    return `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}${apiPath}`
+  }
+
+  // Check if file can be previewed
+  const canPreviewFile = (filePath: string) => {
+    const ext = filePath.split('.').pop()?.toLowerCase()
+    return ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext || '')
+  }
+
   useEffect(() => {
-    fetchAssignmentData()
-  }, [assignmentId])
+    if (!authLoading && user) {
+      fetchAssignmentData()
+    }
+  }, [authLoading, user, assignmentId])
 
   async function fetchAssignmentData() {
     try {
       setLoading(true)
 
-      // Récupérer l'utilisateur actuel
-      const userResult = await AuthService.getCurrentUser()
-      if (!userResult.success || !userResult.data) {
-        router.push('/login')
-        return
-      }
-
       // Récupérer le devoir
-      const assignmentResult = await AssignmentService.getAssignmentById(assignmentId)
-      if (!assignmentResult.success || !assignmentResult.data) {
-        setError('Devoir introuvable')
-        return
-      }
-      setAssignment(assignmentResult.data)
+      const assignmentData = await AssignmentApi.getAssignmentById(Number(assignmentId))
+      setAssignment(assignmentData)
 
       // Récupérer le cours
-      const courseResult = await CourseService.getCourseById(assignmentResult.data.course_id)
-      if (courseResult.success && courseResult.data) {
-        setCourse({
-          code: courseResult.data.code,
-          name: courseResult.data.name,
-        })
+      try {
+        const courseData = await CourseApi.getCourseById(Number(courseId))
+        setCourse(courseData)
+      } catch {
+        // Course might not be accessible
       }
 
       // Récupérer la soumission existante
-      const submissionsResult = await SubmissionService.getSubmissions({
-        assignment_id: assignmentId,
-        student_id: userResult.data.id,
-      })
+      const existingSubmission = await SubmissionApi.getMySubmissionForAssignment(Number(assignmentId))
+      console.log('Submission data:', existingSubmission)
+      setSubmission(existingSubmission)
 
-      if (submissionsResult.data && submissionsResult.data.length > 0) {
-        const existingSubmission = submissionsResult.data[0]
-        setSubmission(existingSubmission)
-        setContent(existingSubmission.submission_text || '')
-
-        // Si la soumission est notée, récupérer la note
-        if (existingSubmission.status === 'graded' && existingSubmission.grade !== null) {
-          setGrade({
-            score: existingSubmission.grade,
-            feedback: existingSubmission.feedback,
-            graded_at: existingSubmission.graded_at || new Date().toISOString(),
-          })
+      // Vérifier si la soumission peut être modifiée
+      if (existingSubmission) {
+        try {
+          const canMod = await SubmissionApi.canModifySubmission(existingSubmission.id)
+          setCanModify(canMod)
+        } catch {
+          setCanModify(false)
         }
       }
+
     } catch (error) {
       console.error('Error fetching assignment:', error)
       setError('Erreur lors du chargement du devoir')
@@ -153,11 +138,6 @@ export default function StudentAssignmentDetailPage({
   }
 
   async function handleSubmit() {
-    if (!content.trim()) {
-      setError('Veuillez entrer une réponse')
-      return
-    }
-
     if (!file) {
       setError('Veuillez joindre un fichier')
       return
@@ -167,45 +147,60 @@ export default function StudentAssignmentDetailPage({
   }
 
   async function confirmSubmit() {
+    if (!file) return
+
     try {
       setSubmitting(true)
       setError('')
 
-      const userResult = await AuthService.getCurrentUser()
-      if (!userResult.success || !userResult.data) {
-        router.push('/login')
-        return
-      }
-
-      // Simuler l'upload du fichier (dans un vrai système, on utiliserait un service de stockage)
-      const fakeFileUrl = `/uploads/submissions/${Date.now()}_${file?.name}`
-
-      let result
-      if (submission) {
-        // Mise à jour d'une soumission existante n'est pas supportée (on ne peut pas modifier après soumission)
-        setError('Vous ne pouvez pas modifier une soumission déjà envoyée')
-        return
-      } else {
-        // Nouvelle soumission
-        result = await SubmissionService.createSubmission({
-          assignment_id: assignmentId,
-          student_id: userResult.data.id,
-          submission_text: content,
-          file_url: fakeFileUrl,
-        })
-      }
-
-      if (result.data) {
-        // Recharger les données
-        await fetchAssignmentData()
-        setShowSubmitDialog(false)
-        setFile(null)
-      } else {
-        setError('Erreur lors de la soumission')
-      }
-    } catch (error) {
+      const result = await SubmissionApi.submitAssignment(Number(assignmentId), file)
+      setSubmission(result)
+      setShowSubmitDialog(false)
+      setFile(null)
+      // Vérifier si peut être modifiée
+      const canMod = await SubmissionApi.canModifySubmission(result.id)
+      setCanModify(canMod)
+    } catch (error: any) {
       console.error('Error submitting assignment:', error)
-      setError('Erreur lors de la soumission')
+      setError(error.message || 'Erreur lors de la soumission')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function confirmEdit() {
+    if (!file || !submission) return
+
+    try {
+      setSubmitting(true)
+      setError('')
+
+      const result = await SubmissionApi.updateSubmission(submission.id, file)
+      setSubmission(result)
+      setShowEditDialog(false)
+      setFile(null)
+    } catch (error: any) {
+      console.error('Error updating submission:', error)
+      setError(error.message || 'Erreur lors de la modification')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function confirmDelete() {
+    if (!submission) return
+
+    try {
+      setSubmitting(true)
+      setError('')
+
+      await SubmissionApi.deleteSubmission(submission.id)
+      setSubmission(null)
+      setCanModify(false)
+      setShowDeleteDialog(false)
+    } catch (error: any) {
+      console.error('Error deleting submission:', error)
+      setError(error.message || 'Erreur lors de la suppression')
     } finally {
       setSubmitting(false)
     }
@@ -223,14 +218,14 @@ export default function StudentAssignmentDetailPage({
 
   function isOverdue() {
     if (!assignment) return false
-    return new Date() > new Date(assignment.due_date)
+    return new Date() > new Date(assignment.dueDate)
   }
 
   function canSubmit() {
     return !submission
   }
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-64" />
@@ -255,6 +250,8 @@ export default function StudentAssignmentDetailPage({
   }
 
   if (!assignment) return null
+
+  const isGraded = submission?.grade !== null && submission?.grade !== undefined
 
   return (
     <div className="space-y-6">
@@ -283,17 +280,17 @@ export default function StudentAssignmentDetailPage({
         <div className="flex flex-col items-end gap-2">
           <Badge
             variant={
-              submission?.status === 'graded'
+              isGraded
                 ? 'default'
                 : isOverdue()
                 ? 'destructive'
                 : 'secondary'
             }
           >
-            {submission?.status === 'graded'
+            {isGraded
               ? 'Noté'
               : submission
-              ? new Date(submission.submitted_at) > new Date(assignment.due_date)
+              ? submission.isLate
                 ? 'Soumis en retard'
                 : 'Soumis'
               : isOverdue()
@@ -302,14 +299,14 @@ export default function StudentAssignmentDetailPage({
           </Badge>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Star className="h-4 w-4" />
-            <span>Sur {assignment.max_score} points</span>
+            <span>Sur 100 points</span>
           </div>
         </div>
       </div>
 
       {/* Note si le devoir est corrigé */}
-      {grade && (
-        <Card className="border-green-200 bg-green-50">
+      {isGraded && submission && (
+        <Card className="border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-green-600" />
@@ -319,17 +316,17 @@ export default function StudentAssignmentDetailPage({
           <CardContent className="space-y-4">
             <div>
               <div className="text-3xl font-bold text-green-600">
-                {grade.score} / {assignment.max_score}
+                {submission.grade} / 100
               </div>
               <div className="text-sm text-muted-foreground">
-                Noté le {formatDate(grade.graded_at)}
+                Soumis le {formatDate(submission.submittedAt)}
               </div>
             </div>
-            {grade.feedback && (
+            {submission.feedback && (
               <div>
                 <Label className="text-sm font-medium">Commentaire du professeur</Label>
-                <div className="mt-2 rounded-md bg-white p-4 text-sm">
-                  {grade.feedback}
+                <div className="mt-2 rounded-md bg-white dark:bg-muted p-4 text-sm">
+                  {submission.feedback}
                 </div>
               </div>
             )}
@@ -343,14 +340,44 @@ export default function StudentAssignmentDetailPage({
           <CardTitle>Consignes</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="prose prose-sm max-w-none">
-            <p className="whitespace-pre-wrap">{assignment.description}</p>
+          <div className="prose prose-sm dark:prose-invert max-w-none">
+            <p className="whitespace-pre-wrap">{assignment.instructions}</p>
           </div>
+
+          {/* Fichier joint au devoir */}
+          {assignment.filePath && (
+            <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
+              <Paperclip className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm flex-1">Fichier joint par le professeur</span>
+              <div className="flex gap-1">
+                {canPreviewFile(assignment.filePath) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setPreviewFile({ 
+                      url: getFileUrl(assignment.filePath!), 
+                      title: assignment.title 
+                    })}
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    Voir
+                  </Button>
+                )}
+                <Button variant="ghost" size="sm" asChild>
+                  <a href={getFileUrl(assignment.filePath)} download target="_blank" rel="noopener noreferrer">
+                    <Download className="h-4 w-4 mr-1" />
+                    Télécharger
+                  </a>
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-4 pt-4 border-t">
             <div className="flex items-center gap-2 text-sm">
               <Calendar className="h-4 w-4 text-muted-foreground" />
               <span className="text-muted-foreground">Date limite:</span>
-              <span className="font-medium">{formatDate(assignment.due_date)}</span>
+              <span className="font-medium">{formatDate(assignment.dueDate)}</span>
             </div>
             {isOverdue() && !submission && (
               <Badge variant="destructive" className="ml-auto">
@@ -366,47 +393,94 @@ export default function StudentAssignmentDetailPage({
       {submission && (
         <Card>
           <CardHeader>
-            <CardTitle>Votre soumission</CardTitle>
-            <CardDescription>
-              Soumis le {formatDate(submission.submitted_at)}
-              {assignment && new Date(submission.submitted_at) > new Date(assignment.due_date) && (
-                <span className="ml-2 text-red-600">(En retard)</span>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Votre soumission</CardTitle>
+                <CardDescription>
+                  Soumis le {formatDate(submission.submittedAt)}
+                  {submission.isLate && (
+                    <span className="ml-2 text-red-600">(En retard)</span>
+                  )}
+                </CardDescription>
+              </div>
+              {canModify && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowEditDialog(true)}
+                  >
+                    <Pencil className="h-4 w-4 mr-1" />
+                    Modifier
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    onClick={() => setShowDeleteDialog(true)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Supprimer
+                  </Button>
+                </div>
               )}
-            </CardDescription>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <Label>Réponse</Label>
-              <div className="mt-2 rounded-md bg-muted p-4 text-sm">
-                {submission.submission_text || 'Aucun texte'}
-              </div>
-            </div>
-            {submission.file_url && (
-              <div>
-                <Label>Fichier joint</Label>
-                <div className="mt-2">
-                  <Button variant="outline" size="sm" asChild>
-                    <a href={submission.file_url} download>
-                      <Download className="mr-2 h-4 w-4" />
-                      Télécharger le fichier
+            {submission.filePath ? (
+              <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium">Fichier soumis</span>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {submission.filePath.split('/').pop()}
+                  </p>
+                </div>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setPreviewFile({ 
+                      url: getFileUrl(submission.filePath), 
+                      title: 'Ma soumission' 
+                    })}
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    Voir
+                  </Button>
+                  <Button variant="ghost" size="sm" asChild>
+                    <a href={getFileUrl(submission.filePath)} download target="_blank" rel="noopener noreferrer">
+                      <Download className="h-4 w-4 mr-1" />
+                      Télécharger
                     </a>
                   </Button>
                 </div>
               </div>
+            ) : (
+              <div className="flex items-center gap-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+                <AlertCircle className="h-4 w-4 text-yellow-600" />
+                <span className="text-sm text-yellow-700 dark:text-yellow-400">Aucun fichier trouvé pour cette soumission</span>
+              </div>
+            )}
+            {!canModify && !isGraded && (
+              <p className="text-sm text-muted-foreground">
+                <AlertCircle className="h-4 w-4 inline mr-1" />
+                La date limite est dépassée. Vous ne pouvez plus modifier votre soumission.
+              </p>
             )}
           </CardContent>
         </Card>
       )}
 
       {/* Formulaire de soumission */}
-      {canSubmit() && submission?.status !== 'graded' && (
+      {canSubmit() && (
         <Card>
           <CardHeader>
             <CardTitle>
               Soumettre votre devoir
             </CardTitle>
             <CardDescription>
-              Remplissez le formulaire et joignez votre fichier
+              Joignez votre fichier pour soumettre le devoir
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -416,20 +490,6 @@ export default function StudentAssignmentDetailPage({
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
-
-            <div className="space-y-2">
-              <Label htmlFor="content">
-                Réponse / Commentaire <span className="text-red-500">*</span>
-              </Label>
-              <Textarea
-                id="content"
-                placeholder="Décrivez votre travail, ajoutez des commentaires..."
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                rows={6}
-                className="resize-none"
-              />
-            </div>
 
             <div className="space-y-2">
               <Label htmlFor="file">
@@ -442,11 +502,16 @@ export default function StudentAssignmentDetailPage({
                   onChange={(e) => {
                     const selectedFile = e.target.files?.[0]
                     if (selectedFile) {
+                      if (!selectedFile.name.toLowerCase().endsWith('.pdf')) {
+                        setError('Seuls les fichiers PDF sont acceptés')
+                        e.target.value = ''
+                        return
+                      }
                       setFile(selectedFile)
                       setError('')
                     }
                   }}
-                  accept=".pdf,.doc,.docx,.txt,.zip,.rar"
+                  accept=".pdf,application/pdf"
                 />
                 {file && (
                   <Badge variant="outline" className="shrink-0">
@@ -456,7 +521,7 @@ export default function StudentAssignmentDetailPage({
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
-                Formats acceptés: PDF, DOC, DOCX, TXT, ZIP, RAR
+                Format accepté: PDF uniquement
               </p>
             </div>
 
@@ -464,14 +529,13 @@ export default function StudentAssignmentDetailPage({
               <Button
                 variant="outline"
                 onClick={() => {
-                  setContent(submission?.submission_text || '')
                   setFile(null)
                   setError('')
                 }}
               >
                 Annuler
               </Button>
-              <Button onClick={handleSubmit} disabled={submitting}>
+              <Button onClick={handleSubmit} disabled={submitting || !file}>
                 <Upload className="mr-2 h-4 w-4" />
                 Soumettre le devoir
               </Button>
@@ -488,7 +552,7 @@ export default function StudentAssignmentDetailPage({
             <AlertDialogDescription>
               {isOverdue()
                 ? 'La date limite est dépassée. Votre soumission sera marquée comme étant en retard. Voulez-vous continuer ?'
-                : 'Êtes-vous sûr de vouloir soumettre ce devoir ? Une fois soumis, vous ne pourrez plus le modifier.'}
+                : 'Êtes-vous sûr de vouloir soumettre ce devoir ?'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -499,6 +563,144 @@ export default function StudentAssignmentDetailPage({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Dialog de modification */}
+      <Dialog open={showEditDialog} onOpenChange={(open) => {
+        setShowEditDialog(open)
+        if (!open) setFile(null)
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Modifier votre soumission</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Sélectionnez un nouveau fichier pour remplacer votre soumission actuelle.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="edit-file">Nouveau fichier</Label>
+              <Input
+                id="edit-file"
+                type="file"
+                onChange={(e) => {
+                  const selectedFile = e.target.files?.[0]
+                  if (selectedFile) {
+                    if (!selectedFile.name.toLowerCase().endsWith('.pdf')) {
+                      setError('Seuls les fichiers PDF sont acceptés')
+                      e.target.value = ''
+                      return
+                    }
+                    setFile(selectedFile)
+                    setError('')
+                  }
+                }}
+                accept=".pdf,application/pdf"
+              />
+              <p className="text-xs text-muted-foreground">
+                Format accepté: PDF uniquement
+              </p>
+              {file && (
+                <Badge variant="outline" className="mt-2">
+                  <FileText className="mr-1 h-3 w-3" />
+                  {file.name}
+                </Badge>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" onClick={() => {
+                setShowEditDialog(false)
+                setFile(null)
+              }}>
+                Annuler
+              </Button>
+              <Button onClick={confirmEdit} disabled={submitting || !file}>
+                {submitting ? 'Modification...' : 'Confirmer la modification'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de suppression */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer la soumission</AlertDialogTitle>
+            <AlertDialogDescription>
+              Êtes-vous sûr de vouloir supprimer votre soumission ? Cette action est irréversible.
+              Vous pourrez soumettre un nouveau fichier après suppression.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={submitting}>Annuler</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDelete} 
+              disabled={submitting}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {submitting ? 'Suppression...' : 'Supprimer'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* File Preview Dialog */}
+      <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              {previewFile?.title}
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Prévisualisation du fichier
+            </p>
+          </DialogHeader>
+          <div className="flex items-center justify-end mb-2">
+            {previewFile && (
+              <Button variant="outline" size="sm" asChild>
+                <a href={previewFile.url} download target="_blank" rel="noopener noreferrer">
+                  <Download className="h-4 w-4 mr-2" />
+                  Télécharger
+                </a>
+              </Button>
+            )}
+          </div>
+          <div className="flex-1 overflow-auto min-h-0">
+            {previewFile && (
+              <>
+                {previewFile.url.toLowerCase().includes('.pdf') ? (
+                  <iframe
+                    src={previewFile.url}
+                    className="w-full h-[70vh] border-0"
+                    title={previewFile.title}
+                  />
+                ) : /\.(png|jpg|jpeg|gif|webp)/i.test(previewFile.url) ? (
+                  <div className="flex items-center justify-center p-4">
+                    <img
+                      src={previewFile.url}
+                      alt={previewFile.title}
+                      className="max-w-full max-h-[70vh] object-contain rounded-lg"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                    <FileText className="h-16 w-16 mb-4" />
+                    <p>Aperçu non disponible pour ce type de fichier</p>
+                    <p className="text-xs mt-2">URL: {previewFile.url}</p>
+                    <Button variant="outline" className="mt-4" asChild>
+                      <a href={previewFile.url} download target="_blank" rel="noopener noreferrer">
+                        <Download className="h-4 w-4 mr-2" />
+                        Télécharger le fichier
+                      </a>
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

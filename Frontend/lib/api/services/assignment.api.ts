@@ -10,6 +10,7 @@ export interface AssignmentResponse {
   courseTitle: string
   teacherId: number
   teacherName: string
+  filePath?: string | null
   submissionCount: number
   pendingSubmissions: number
   createdAt?: string
@@ -20,6 +21,14 @@ export interface CreateAssignmentRequest {
   instructions: string
   dueDate: string
   courseId: number
+  filePath?: string
+}
+
+export interface UpdateAssignmentRequest {
+  title?: string
+  instructions?: string
+  dueDate?: string
+  filePath?: string
 }
 
 export class AssignmentApi {
@@ -35,6 +44,13 @@ export class AssignmentApi {
    */
   static async getAssignmentById(id: number): Promise<AssignmentResponse> {
     return await apiClient.get<AssignmentResponse>(`/api/assignments/${id}`)
+  }
+
+  /**
+   * Modifier un devoir (TEACHER/ADMIN uniquement)
+   */
+  static async updateAssignment(id: number, request: UpdateAssignmentRequest): Promise<AssignmentResponse> {
+    return await apiClient.put<AssignmentResponse>(`/api/assignments/${id}`, request)
   }
 
   /**

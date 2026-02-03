@@ -95,6 +95,20 @@ class ApiClient {
     return response.data
   }
 
+  async upload<T = any>(url: string, formData: FormData, method: 'POST' | 'PUT' = 'POST', config?: AxiosRequestConfig): Promise<T> {
+    const requestConfig = {
+      ...config,
+      headers: {
+        ...config?.headers,
+        'Content-Type': 'multipart/form-data',
+      },
+    }
+    const response = method === 'PUT' 
+      ? await this.client.put<T>(url, formData, requestConfig)
+      : await this.client.post<T>(url, formData, requestConfig)
+    return response.data
+  }
+
   setToken(token: string): void {
     if (typeof window === 'undefined') return
     localStorage.setItem('token', token)

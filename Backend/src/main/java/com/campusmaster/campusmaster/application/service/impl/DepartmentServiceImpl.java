@@ -1,12 +1,11 @@
 package com.campusmaster.campusmaster.application.service.impl;
 
-import org.springframework.stereotype.Service;
-
 import com.campusmaster.campusmaster.application.dto.CreateDepartmentRequest;
 import com.campusmaster.campusmaster.application.dto.DepartmentResponse;
 import com.campusmaster.campusmaster.application.service.DepartmentService;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Department;
 import com.campusmaster.campusmaster.domain.repository.DepartmentRepository;
+import org.springframework.stereotype.Service;
 
 @Service
 public class DepartmentServiceImpl implements DepartmentService {
@@ -23,10 +22,8 @@ public class DepartmentServiceImpl implements DepartmentService {
             throw new RuntimeException("Department code already exists");
         }
 
-        Department department = Department.builder()
-                .name(request.getName())
-                .code(request.getCode())
-                .build();
+        Department department =
+                Department.builder().name(request.getName()).code(request.getCode()).build();
         Department saved = departmentRepository.save(department);
         return DepartmentResponse.builder()
                 .id(saved.getId())
@@ -34,5 +31,4 @@ public class DepartmentServiceImpl implements DepartmentService {
                 .code(saved.getCode())
                 .build();
     }
-
 }

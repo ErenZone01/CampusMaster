@@ -1,10 +1,9 @@
 package com.campusmaster.campusmaster.application.service;
 
-import java.util.List;
-
 import com.campusmaster.campusmaster.application.dto.CreateModuleRequest;
 import com.campusmaster.campusmaster.application.dto.ModuleResponse;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Semester;
+import java.util.List;
 
 public interface ModuleService {
     ModuleResponse createModule(CreateModuleRequest module);

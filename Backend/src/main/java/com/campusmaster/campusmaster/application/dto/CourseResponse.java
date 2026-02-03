@@ -1,10 +1,8 @@
 package com.campusmaster.campusmaster.application.dto;
 
-import java.time.LocalDateTime;
-
 import com.campusmaster.campusmaster.domain.model.course.Course;
 import com.campusmaster.campusmaster.domain.model.course.CourseStatus;
-
+import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -47,7 +45,10 @@ public class CourseResponse {
                 .semesterId(course.getSemester().getId())
                 .semesterName(course.getSemester().getName())
                 .teacherId(course.getTeacher().getId())
-                .teacherName(course.getTeacher().getFirstName() + " " + course.getTeacher().getLastName())
+                .teacherName(
+                        course.getTeacher().getFirstName()
+                                + " "
+                                + course.getTeacher().getLastName())
                 .createdAt(course.getCreatedAt())
                 .updatedAt(course.getUpdatedAt())
                 .build();

@@ -1,18 +1,16 @@
 package com.campusmaster.campusmaster.application.service.impl;
 
+import com.campusmaster.campusmaster.application.service.FileStorageService;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.UUID;
-
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
-
-import com.campusmaster.campusmaster.application.service.FileStorageService;
 
 @Service
 public class FileStorageServiceImpl implements FileStorageService {
@@ -24,17 +22,19 @@ public class FileStorageServiceImpl implements FileStorageService {
         try {
             Files.createDirectories(this.fileStorageLocation);
         } catch (Exception ex) {
-            throw new RuntimeException("Could not create the directory where the uploaded files will be stored.", ex);
+            throw new RuntimeException(
+                    "Could not create the directory where the uploaded files will be stored.", ex);
         }
     }
 
     @Override
     public String storeFile(MultipartFile file, String folder) {
         String originalFilename = StringUtils.cleanPath(file.getOriginalFilename());
-        
+
         try {
             if (originalFilename.contains("..")) {
-                throw new RuntimeException("Filename contains invalid path sequence " + originalFilename);
+                throw new RuntimeException(
+                        "Filename contains invalid path sequence " + originalFilename);
             }
 
             String fileExtension = "";
@@ -43,16 +43,17 @@ public class FileStorageServiceImpl implements FileStorageService {
             }
 
             String newFilename = UUID.randomUUID().toString() + fileExtension;
-            
+
             Path folderPath = this.fileStorageLocation.resolve(folder);
             Files.createDirectories(folderPath);
-            
+
             Path targetLocation = folderPath.resolve(newFilename);
             Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
 
             return folder + "/" + newFilename;
         } catch (IOException ex) {
-            throw new RuntimeException("Could not store file " + originalFilename + ". Please try again!", ex);
+            throw new RuntimeException(
+                    "Could not store file " + originalFilename + ". Please try again!", ex);
         }
     }
 

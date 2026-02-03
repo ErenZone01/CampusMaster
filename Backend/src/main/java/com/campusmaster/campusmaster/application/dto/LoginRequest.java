@@ -16,13 +16,6 @@ import lombok.Setter;
 @Setter
 @Builder
 public class LoginRequest {
-    @Email
-    @NotBlank
-    @NotEmpty
-    @NotNull
-    private String email;
-    @NotBlank
-    @NotEmpty
-    @NotNull
-    private String password;
+    @Email @NotBlank @NotEmpty @NotNull private String email;
+    @NotBlank @NotEmpty @NotNull private String password;
 }

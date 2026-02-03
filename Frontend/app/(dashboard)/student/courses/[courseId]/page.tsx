@@ -1,7 +1,17 @@
 'use client'
 
 import { useState, useEffect, use } from 'react'
-import { AuthService, CourseService, MaterialService, AssignmentService, SubmissionService, GradeService, UserService, DepartmentService } from '@/lib/mock'
+import { useRequireAuth } from '@/hooks/use-auth'
+import { 
+  CourseApi, 
+  MaterialApi, 
+  AssignmentApi,
+  SubmissionApi,
+  type CourseResponse,
+  type MaterialResponse,
+  type AssignmentResponse,
+  type SubmissionResponse
+} from '@/lib/api/services'
 import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -10,55 +20,31 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Progress } from '@/components/ui/progress'
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   BookOpen,
   FileText,
   ClipboardList,
-  Users,
   Calendar,
   Download,
   ExternalLink,
   Clock,
   ChevronLeft,
   GraduationCap,
+  Video,
+  Link as LinkIcon,
+  Eye,
+  Play,
+  X,
 } from 'lucide-react'
 
-interface CourseDetail {
-  id: string
-  code: string
-  name: string
-  description: string | null
-  credits: number
-  schedule_info: string | null
-  teacher: {
-    first_name: string
-    last_name: string
-    email: string
-  }
-  department: {
-    name: string
-  }
-}
-
-interface Material {
-  id: string
-  title: string
-  description: string | null
-  type: string
-  file_url: string | null
-  external_url: string | null
-  created_at: string
-}
-
-interface Assignment {
-  id: string
-  title: string
-  description: string | null
-  due_date: string
-  max_score: number
-  status: string
-  has_submission: boolean
-  submission_status: string | null
-  grade: number | null
+interface AssignmentWithSubmission extends AssignmentResponse {
+  hasSubmission: boolean
+  submission: SubmissionResponse | null
 }
 
 export default function StudentCourseDetailPage({ 
@@ -67,89 +53,57 @@ export default function StudentCourseDetailPage({
   params: Promise<{ courseId: string }> 
 }) {
   const { courseId } = use(params)
-  const [course, setCourse] = useState<CourseDetail | null>(null)
-  const [materials, setMaterials] = useState<Material[]>([])
-  const [assignments, setAssignments] = useState<Assignment[]>([])
+  const { user, isLoading: authLoading } = useRequireAuth(['student'])
+  const [course, setCourse] = useState<CourseResponse | null>(null)
+  const [materials, setMaterials] = useState<MaterialResponse[]>([])
+  const [assignments, setAssignments] = useState<AssignmentWithSubmission[]>([])
   const [loading, setLoading] = useState(true)
+  const [previewMaterial, setPreviewMaterial] = useState<MaterialResponse | null>(null)
 
   useEffect(() => {
-    fetchCourseData()
-  }, [courseId])
+    if (!authLoading && user) {
+      fetchCourseData()
+    }
+  }, [authLoading, user, courseId])
 
   async function fetchCourseData() {
     try {
-      const currentUserResponse = await AuthService.getCurrentUser()
-      if (!currentUserResponse?.data) return
-      const currentUser = currentUserResponse.data
-
+      const courseIdNum = parseInt(courseId)
+      
       // Fetch course details
-      const courseResponse = await CourseService.getCourseById(courseId)
-      const courseData = courseResponse.data
-      if (!courseData) throw new Error('Cours introuvable')
+      const courseData = await CourseApi.getCourseById(courseIdNum)
+      setCourse(courseData)
 
-      const teacherResponse = await UserService.getUserById(courseData.teacher_id)
-      const teacher = teacherResponse.data
+      // Fetch materials (only visible ones for students)
+      try {
+        const allMaterials = await MaterialApi.getCourseMaterials(courseIdNum)
+        const visibleMaterials = allMaterials.filter(m => m.isVisible)
+        setMaterials(visibleMaterials)
+      } catch {
+        setMaterials([])
+      }
 
-      const deptResponse = await DepartmentService.getDepartmentById(courseData.department_id)
-      const dept = deptResponse.data
-
-      setCourse({
-        id: courseData.id,
-        code: courseData.code,
-        name: courseData.name,
-        description: courseData.description,
-        credits: courseData.credits,
-        schedule_info: '',
-        teacher: teacher ? {
-          first_name: teacher.first_name || '',
-          last_name: teacher.last_name || '',
-          email: teacher.email || '',
-        } : { first_name: '', last_name: '', email: '' },
-        department: dept ? { name: dept.name } : { name: '' },
-      })
-
-      // Fetch materials
-      const materialsResponse = await MaterialService.getMaterialsByCourse(courseId)
-      const allMaterials = materialsResponse.data || []
-      const visibleMaterials = allMaterials.filter((m: any) => m.is_visible)
-      setMaterials(visibleMaterials)
-
-      // Fetch assignments with submission status
-      const assignmentsResponse = await AssignmentService.getAssignmentsByCourse(courseId)
-      const allAssignments = assignmentsResponse.data || []
-      const relevantAssignments = allAssignments.filter((a: any) =>
-        ['open', 'closed', 'graded'].includes(a.status)
-      )
-
-      // Check submissions and grades for each assignment
-      const assignmentsWithStatus = await Promise.all(
-        relevantAssignments.map(async (assignment: any) => {
-          const submissionsResponse = await SubmissionService.getSubmissions({
-            assignment_id: assignment.id,
-            student_id: currentUser.id,
-          })
-          const submissions = submissionsResponse.data || []
-          const submission = submissions[0] || null
-
-          const gradesResponse = await GradeService.getGradesByAssignment(assignment.id)
-          const grades = gradesResponse.data || []
-          const grade = grades.find((g: any) => g.student_id === currentUser.id) || null
-
+      // Fetch assignments
+      try {
+        const courseAssignments = await AssignmentApi.getAssignmentsByCourse(courseIdNum)
+        
+        // Fetch my submissions to check which assignments have been submitted
+        const mySubmissions = await SubmissionApi.getMySubmissions()
+        
+        // Map assignments with submission status
+        const assignmentsWithStatus: AssignmentWithSubmission[] = courseAssignments.map(assignment => {
+          const submission = mySubmissions.find(s => s.assignmentId === assignment.id) || null
           return {
-            id: assignment.id,
-            title: assignment.title,
-            description: assignment.description,
-            due_date: assignment.due_date,
-            max_score: assignment.max_score || 100,
-            status: assignment.status,
-            has_submission: !!submission,
-            submission_status: submission?.status || null,
-            grade: grade?.score || null,
+            ...assignment,
+            hasSubmission: !!submission,
+            submission
           }
         })
-      )
-
-      setAssignments(assignmentsWithStatus)
+        
+        setAssignments(assignmentsWithStatus)
+      } catch {
+        setAssignments([])
+      }
     } catch (error) {
       console.error('Error fetching course data:', error)
     } finally {
@@ -171,14 +125,14 @@ export default function StudentCourseDetailPage({
 
   function getMaterialIcon(type: string) {
     switch (type) {
-      case 'document': return <FileText className="h-4 w-4" />
-      case 'video': return <ExternalLink className="h-4 w-4" />
-      case 'link': return <ExternalLink className="h-4 w-4" />
+      case 'DOCUMENT': return <FileText className="h-4 w-4" />
+      case 'VIDEO': return <Video className="h-4 w-4" />
+      case 'LINK': return <LinkIcon className="h-4 w-4" />
       default: return <FileText className="h-4 w-4" />
     }
   }
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-64" />
@@ -199,7 +153,7 @@ export default function StudentCourseDetailPage({
     )
   }
 
-  const completedAssignments = assignments.filter(a => a.has_submission).length
+  const completedAssignments = assignments.filter(a => a.hasSubmission).length
   const progress = assignments.length > 0 ? (completedAssignments / assignments.length) * 100 : 0
 
   return (
@@ -223,18 +177,25 @@ export default function StudentCourseDetailPage({
                 </Badge>
                 <Badge>{course.credits} crédits</Badge>
               </div>
-              <CardTitle className="text-2xl">{course.name}</CardTitle>
+              <CardTitle className="text-2xl">{course.title}</CardTitle>
               <CardDescription className="flex items-center gap-4">
                 <span className="flex items-center gap-1">
                   <GraduationCap className="h-4 w-4" />
-                  {course.teacher.first_name} {course.teacher.last_name}
+                  {course.teacherName}
                 </span>
                 <span className="flex items-center gap-1">
                   <BookOpen className="h-4 w-4" />
-                  {course.department.name}
+                  {course.departmentName}
                 </span>
               </CardDescription>
             </div>
+            {course.coverImage && (
+              <img 
+                src={course.coverImage} 
+                alt={course.title}
+                className="w-32 h-20 rounded-lg object-cover"
+              />
+            )}
           </div>
           
           {course.description && (
@@ -276,39 +237,81 @@ export default function StudentCourseDetailPage({
             </Card>
           ) : (
             <div className="space-y-3">
-              {materials.map((material) => (
-                <Card key={material.id}>
-                  <CardContent className="flex items-center justify-between p-4">
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        {getMaterialIcon(material.type)}
+              {materials.map((material) => {
+                const isVideo = material.type === 'VIDEO' || 
+                  material.fileUrl?.match(/\.(mp4|webm|ogg|mov)$/i) ||
+                  material.externalUrl?.includes('youtube') ||
+                  material.externalUrl?.includes('vimeo')
+                const isPdf = material.fileUrl?.match(/\.pdf$/i)
+                const isImage = material.fileUrl?.match(/\.(jpg|jpeg|png|gif|webp)$/i)
+                const canPreview = isVideo || isPdf || isImage || material.type === 'LINK'
+                
+                return (
+                  <Card key={material.id}>
+                    <CardContent className="flex items-center justify-between p-4">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          {getMaterialIcon(material.type)}
+                        </div>
+                        <div>
+                          <h4 className="font-medium">{material.title}</h4>
+                          {material.description && (
+                            <p className="text-sm text-muted-foreground">{material.description}</p>
+                          )}
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant="outline" className="text-xs">
+                              {material.type === 'VIDEO' ? 'Vidéo' : material.type === 'LINK' ? 'Lien' : 'Document'}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              Ajouté le {new Date(material.createdAt).toLocaleDateString('fr-FR')}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="font-medium">{material.title}</h4>
-                        {material.description && (
-                          <p className="text-sm text-muted-foreground">{material.description}</p>
+                      <div className="flex items-center gap-2">
+                        {canPreview && (
+                          <Button 
+                            variant="default" 
+                            size="sm"
+                            onClick={() => setPreviewMaterial(material)}
+                            className="gap-2"
+                          >
+                            {isVideo ? <Play className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            {isVideo ? 'Lire' : 'Voir'}
+                          </Button>
                         )}
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Ajouté le {new Date(material.created_at).toLocaleDateString('fr-FR')}
-                        </p>
+                        {material.fileUrl && (
+                          <Button variant="outline" size="sm" asChild>
+                            <a
+                              href={material.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              download
+                              className="gap-2"
+                            >
+                              <Download className="h-4 w-4" />
+                              Télécharger
+                            </a>
+                          </Button>
+                        )}
+                        {material.externalUrl && !material.fileUrl && (
+                          <Button variant="outline" size="sm" asChild>
+                            <a
+                              href={material.externalUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="gap-2"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                              Ouvrir
+                            </a>
+                          </Button>
+                        )}
                       </div>
-                    </div>
-                    {(material.file_url || material.external_url) && (
-                      <Button variant="outline" size="sm" asChild>
-                        <a
-                          href={material.file_url || material.external_url || '#'}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="gap-2"
-                        >
-                          {material.file_url ? <Download className="h-4 w-4" /> : <ExternalLink className="h-4 w-4" />}
-                          {material.file_url ? 'Télécharger' : 'Ouvrir'}
-                        </a>
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                )
+              })}
             </div>
           )}
         </TabsContent>
@@ -325,8 +328,8 @@ export default function StudentCourseDetailPage({
           ) : (
             <div className="space-y-3">
               {assignments.map((assignment) => {
-                const deadline = getDeadlineStatus(assignment.due_date)
-                const isPastDue = new Date(assignment.due_date) < new Date()
+                const deadline = getDeadlineStatus(assignment.dueDate)
+                const isPastDue = new Date(assignment.dueDate) < new Date()
                 
                 return (
                   <Card key={assignment.id}>
@@ -335,42 +338,42 @@ export default function StudentCourseDetailPage({
                         <div className="flex items-center gap-2">
                           <h4 className="font-medium">{assignment.title}</h4>
                           <Badge variant={deadline.variant}>{deadline.label}</Badge>
-                          {assignment.has_submission && (
+                          {assignment.hasSubmission && (
                             <Badge variant="outline" className="bg-green-500/10 text-green-600">
                               Rendu
                             </Badge>
                           )}
+                          {assignment.submission?.grade !== null && assignment.submission?.grade !== undefined && (
+                            <Badge variant="secondary">
+                              Note: {assignment.submission.grade}/100
+                            </Badge>
+                          )}
                         </div>
-                        {assignment.description && (
+                        {assignment.instructions && (
                           <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
-                            {assignment.description}
+                            {assignment.instructions}
                           </p>
                         )}
                         <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            {new Date(assignment.due_date).toLocaleDateString('fr-FR', {
+                            {new Date(assignment.dueDate).toLocaleDateString('fr-FR', {
                               day: 'numeric',
                               month: 'short',
                               hour: '2-digit',
                               minute: '2-digit',
                             })}
                           </span>
-                          <span>Note max: {assignment.max_score}</span>
-                          {assignment.grade !== null && (
-                            <span className="font-medium text-primary">
-                              Note: {assignment.grade}/{assignment.max_score}
-                            </span>
-                          )}
+                          <span>{assignment.submissionCount} soumissions</span>
                         </div>
                       </div>
                       <Button
                         asChild
-                        variant={assignment.has_submission ? 'outline' : 'default'}
-                        disabled={isPastDue && !assignment.has_submission}
+                        variant={assignment.hasSubmission ? 'outline' : 'default'}
+                        disabled={isPastDue && !assignment.hasSubmission}
                       >
                         <Link href={`/student/courses/${courseId}/assignments/${assignment.id}`}>
-                          {assignment.has_submission ? 'Voir' : 'Soumettre'}
+                          {assignment.hasSubmission ? 'Voir' : 'Soumettre'}
                         </Link>
                       </Button>
                     </CardContent>
@@ -381,6 +384,119 @@ export default function StudentCourseDetailPage({
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Material Preview Dialog */}
+      <Dialog open={!!previewMaterial} onOpenChange={() => setPreviewMaterial(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {previewMaterial && getMaterialIcon(previewMaterial.type)}
+              {previewMaterial?.title}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="relative overflow-auto max-h-[calc(90vh-120px)]">
+            {previewMaterial && (
+              <>
+                {/* Video Preview */}
+                {(previewMaterial.type === 'VIDEO' || 
+                  previewMaterial.fileUrl?.match(/\.(mp4|webm|ogg|mov)$/i)) && (
+                  <div className="aspect-video bg-black rounded-lg overflow-hidden">
+                    {previewMaterial.externalUrl?.includes('youtube') ? (
+                      <iframe
+                        src={previewMaterial.externalUrl.replace('watch?v=', 'embed/')}
+                        className="w-full h-full"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
+                    ) : previewMaterial.externalUrl?.includes('vimeo') ? (
+                      <iframe
+                        src={previewMaterial.externalUrl.replace('vimeo.com', 'player.vimeo.com/video')}
+                        className="w-full h-full"
+                        allow="autoplay; fullscreen; picture-in-picture"
+                        allowFullScreen
+                      />
+                    ) : (
+                      <video
+                        src={previewMaterial.fileUrl || previewMaterial.externalUrl || ''}
+                        controls
+                        className="w-full h-full"
+                      >
+                        Votre navigateur ne supporte pas la lecture vidéo.
+                      </video>
+                    )}
+                  </div>
+                )}
+
+                {/* PDF Preview */}
+                {previewMaterial.fileUrl?.match(/\.pdf$/i) && (
+                  <iframe
+                    src={previewMaterial.fileUrl}
+                    className="w-full h-[70vh] rounded-lg border"
+                    title={previewMaterial.title}
+                  />
+                )}
+
+                {/* Image Preview */}
+                {previewMaterial.fileUrl?.match(/\.(jpg|jpeg|png|gif|webp)$/i) && (
+                  <div className="flex items-center justify-center">
+                    <img
+                      src={previewMaterial.fileUrl}
+                      alt={previewMaterial.title}
+                      className="max-w-full max-h-[70vh] rounded-lg object-contain"
+                    />
+                  </div>
+                )}
+
+                {/* Link Preview - Show in iframe or redirect */}
+                {previewMaterial.type === 'LINK' && previewMaterial.externalUrl && 
+                  !previewMaterial.externalUrl.includes('youtube') && 
+                  !previewMaterial.externalUrl.includes('vimeo') && (
+                  <div className="space-y-4">
+                    <p className="text-muted-foreground">
+                      Ce lien s&apos;ouvrira dans un nouvel onglet :
+                    </p>
+                    <Button asChild className="w-full">
+                      <a
+                        href={previewMaterial.externalUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="gap-2"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                        Ouvrir {previewMaterial.externalUrl}
+                      </a>
+                    </Button>
+                  </div>
+                )}
+
+                {/* Description */}
+                {previewMaterial.description && (
+                  <div className="mt-4 p-4 bg-muted rounded-lg">
+                    <p className="text-sm text-muted-foreground">{previewMaterial.description}</p>
+                  </div>
+                )}
+
+                {/* Download button in preview */}
+                {previewMaterial.fileUrl && (
+                  <div className="mt-4 flex justify-end">
+                    <Button variant="outline" asChild>
+                      <a
+                        href={previewMaterial.fileUrl}
+                        download
+                        className="gap-2"
+                      >
+                        <Download className="h-4 w-4" />
+                        Télécharger le fichier
+                      </a>
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -1,8 +1,5 @@
 package com.campusmaster.campusmaster.application.service.impl;
 
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.stereotype.Service;
-
 import com.campusmaster.campusmaster.application.dto.AuthResponse;
 import com.campusmaster.campusmaster.application.dto.LoginRequest;
 import com.campusmaster.campusmaster.application.dto.StudentRequest;
@@ -16,9 +13,9 @@ import com.campusmaster.campusmaster.domain.repository.DepartmentRepository;
 import com.campusmaster.campusmaster.domain.repository.StudentRepository;
 import com.campusmaster.campusmaster.domain.repository.UserRepository;
 import com.campusmaster.campusmaster.infrastructure.security.config.JwtService;
-
 import lombok.RequiredArgsConstructor;
-
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
@@ -28,7 +25,6 @@ public class AuthServiceImpl implements AuthService {
     private final DepartmentRepository departmentRepository;
     private final BCryptPasswordEncoder passwordEncoder;
     private final JwtService jwtService;
-    
 
     @Override
     public UserResponse register(StudentRequest request) {
@@ -36,8 +32,11 @@ public class AuthServiceImpl implements AuthService {
             throw new IllegalStateException("Cet email est déjà utilisé");
         }
 
-        Department department = departmentRepository.findByCode(request.getDepartment_code())
-                .orElseThrow(() -> new IllegalArgumentException("Code département invalide"));
+        Department department =
+                departmentRepository
+                        .findByCode(request.getDepartment_code())
+                        .orElseThrow(
+                                () -> new IllegalArgumentException("Code département invalide"));
 
         Student student = new Student();
         student.setFirstName(request.getFirstName());
@@ -56,8 +55,6 @@ public class AuthServiceImpl implements AuthService {
         } while (studentRepository.existsByINE(ine));
         student.setINE(ine);
 
-
-
         studentRepository.save(student);
 
         return UserResponse.builder()
@@ -70,8 +67,13 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse login(LoginRequest request) {
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new IllegalArgumentException("Email ou mot de passe incorrect"));
+        User user =
+                userRepository
+                        .findByEmail(request.getEmail())
+                        .orElseThrow(
+                                () ->
+                                        new IllegalArgumentException(
+                                                "Email ou mot de passe incorrect"));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             throw new IllegalArgumentException("Email ou mot de passe incorrect");
@@ -79,25 +81,25 @@ public class AuthServiceImpl implements AuthService {
 
         if (user.getRole() == Role.STUDENT) {
             Student student = studentRepository.findByEmail(request.getEmail()).get();
-            if (!student.isValidated()){
-                throw new IllegalStateException("Votre compte étudiant n'est pas encore validé par un administrateur");
+            if (!student.isValidated()) {
+                throw new IllegalStateException(
+                        "Votre compte étudiant n'est pas encore validé par un administrateur");
             }
         }
-
 
         String token = jwtService.generateToken(user.getEmail(), user.getRole().name());
         AuthResponse response = new AuthResponse();
         response.setToken(token);
-        response.setUser(UserResponse.builder()
-                    .id(user.getId())
-                    .email(user.getEmail())
-                    .firstName(user.getFirstName())
-                    .lastName(user.getLastName())
-                    .avatarUrl(user.getAvatarUrl())
-                    .role(user.getRole())
-                    .build());
+        response.setUser(
+                UserResponse.builder()
+                        .id(user.getId())
+                        .email(user.getEmail())
+                        .firstName(user.getFirstName())
+                        .lastName(user.getLastName())
+                        .avatarUrl(user.getAvatarUrl())
+                        .role(user.getRole())
+                        .build());
 
         return response;
     }
-
 }

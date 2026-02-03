@@ -1,20 +1,20 @@
 package com.campusmaster.campusmaster.infrastructure.security.config;
 
+import com.campusmaster.campusmaster.domain.model.user.Admin;
+import com.campusmaster.campusmaster.domain.model.user.Role;
+import com.campusmaster.campusmaster.domain.repository.UserRepository;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
-import com.campusmaster.campusmaster.domain.model.user.Admin;
-import com.campusmaster.campusmaster.domain.model.user.Role;
-import com.campusmaster.campusmaster.domain.repository.UserRepository;
-
 @Configuration
 public class AdminInitializer {
 
     @Bean
-    CommandLineRunner initAdmin(UserRepository userRepository, BCryptPasswordEncoder passwordEncoder) {
-       
+    CommandLineRunner initAdmin(
+            UserRepository userRepository, BCryptPasswordEncoder passwordEncoder) {
+
         return args -> {
             if (!userRepository.existsByRole(Role.ADMIN)) {
 

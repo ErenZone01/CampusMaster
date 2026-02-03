@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { CourseApi, EnrollmentApi, type CourseResponse, type EnrollmentResponse } from '@/lib/api/services'
+import { CourseApi, EnrollmentApi, type CourseResponse } from '@/lib/api/services'
+import { useRequireAuth } from '@/hooks/use-auth'
 import { CourseCard } from '@/components/courses/course-card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -26,17 +27,21 @@ import {
 import { toast } from 'sonner'
 
 export default function StudentCoursesPage() {
+  const { user, isLoading: authLoading } = useRequireAuth(['student'])
   const [enrolledCourses, setEnrolledCourses] = useState<CourseResponse[]>([])
   const [availableCourses, setAvailableCourses] = useState<CourseResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [dialogSearchQuery, setDialogSearchQuery] = useState('')
   const [departmentFilter, setDepartmentFilter] = useState<string>('all')
   const [showEnrollDialog, setShowEnrollDialog] = useState(false)
   const [enrolling, setEnrolling] = useState<number | null>(null)
 
   useEffect(() => {
-    fetchCourses()
-  }, [])
+    if (!authLoading && user) {
+      fetchCourses()
+    }
+  }, [authLoading, user])
 
   async function fetchCourses() {
     try {
@@ -79,24 +84,24 @@ export default function StudentCoursesPage() {
     }
   }
 
-  const filteredCourses = courses.filter(course => {
+  const filteredCourses = enrolledCourses.filter(course => {
     const matchesSearch = 
-      course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       course.code.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesDepartment = departmentFilter === 'all' || course.department?.code === departmentFilter
+    const matchesDepartment = departmentFilter === 'all' || course.departmentName === departmentFilter
     return matchesSearch && matchesDepartment
   })
 
   const filteredAvailable = availableCourses.filter(course => {
     const matchesSearch = 
-      course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      course.code.toLowerCase().includes(searchQuery.toLowerCase())
+      course.title.toLowerCase().includes(dialogSearchQuery.toLowerCase()) ||
+      course.code.toLowerCase().includes(dialogSearchQuery.toLowerCase())
     return matchesSearch
   })
 
-  const departments = [...new Set(courses.map(c => c.department?.code).filter(Boolean))]
+  const departments = [...new Set(enrolledCourses.map(c => c.departmentName).filter(Boolean))]
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -119,7 +124,7 @@ export default function StudentCoursesPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Mes Cours</h1>
           <p className="text-muted-foreground">
-            {courses.length} cours inscrit{courses.length > 1 ? 's' : ''}
+            {enrolledCourses.length} cours inscrit{enrolledCourses.length > 1 ? 's' : ''}
           </p>
         </div>
         
@@ -142,8 +147,8 @@ export default function StudentCoursesPage() {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Rechercher un cours..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={dialogSearchQuery}
+                onChange={(e) => setDialogSearchQuery(e.target.value)}
                 className="pl-10"
               />
             </div>
@@ -152,28 +157,33 @@ export default function StudentCoursesPage() {
               {filteredAvailable.length === 0 ? (
                 <div className="py-8 text-center text-muted-foreground">
                   Aucun cours disponible
-                </div>enrolledCourses.filter(course => {
-    const matchesSearch = 
-      course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      course.code.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesDepartment = departmentFilter === 'all' || course.departmentName === departmentFilter
-    return matchesSearch && matchesDepartment
-  })
-
-  const filteredAvailable = availableCourses.filter(course => {
-    const matchesSearch = 
-      course.title.toLowerCase().includes(searchQuery.toLowerCtitle}</span>
+                </div>
+              ) : (
+                filteredAvailable.map(course => (
+                  <div
+                    key={course.id}
+                    className="flex items-center justify-between rounded-lg border p-4"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">{course.code}</Badge>
+                        <span className="font-medium">{course.title}</span>
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        {course.teacherN
-
-  const departments = [...new Set(enrolledCourses.map(c => c.departmentNam
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {course.teacherName} • {course.departmentName}
+                      </p>
+                      {course.description && (
+                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                          {course.description}
+                        </p>
+                      )}
+                    </div>
                     <Button
                       size="sm"
                       onClick={() => handleEnroll(course.id)}
                       disabled={enrolling === course.id}
                     >
-                      {enrolling === course.id ? 'Inscription...' : 'S\'inscrire'}
+                      {enrolling === course.id ? 'Inscription...' : "S'inscrire"}
                     </Button>
                   </div>
                 ))
@@ -192,7 +202,7 @@ export default function StudentCoursesPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-10"
-          />enrolledCourses.length} cours inscrit{enrolledC
+          />
         </div>
         <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
           <SelectTrigger className="w-full sm:w-48">
@@ -216,7 +226,7 @@ export default function StudentCoursesPage() {
           <p className="mt-2 text-sm text-muted-foreground">
             {searchQuery || departmentFilter !== 'all'
               ? 'Essayez de modifier vos filtres'
-              : 'Inscrivez-vous à un cours pour commencer'}
+              : "Inscrivez-vous à un cours pour commencer"}
           </p>
         </div>
       ) : (

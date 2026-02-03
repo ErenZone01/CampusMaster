@@ -1,28 +1,26 @@
 package com.campusmaster.campusmaster.presentation.controller;
 
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-
 import com.campusmaster.campusmaster.application.dto.AuthResponse;
 import com.campusmaster.campusmaster.application.dto.LoginRequest;
 import com.campusmaster.campusmaster.application.dto.StudentRequest;
 import com.campusmaster.campusmaster.application.dto.UserResponse;
 import com.campusmaster.campusmaster.application.service.AuthService;
 import com.campusmaster.campusmaster.domain.model.user.User;
-
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -56,7 +54,9 @@ public class AuthController {
     }
 
     @GetMapping("/me")
-    @Operation(summary = "Utilisateur connecté", description = "Récupérer les informations de l'utilisateur authentifié")
+    @Operation(
+            summary = "Utilisateur connecté",
+            description = "Récupérer les informations de l'utilisateur authentifié")
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Utilisateur trouvé"),
         @ApiResponse(responseCode = "401", description = "Non authentifié")
@@ -66,14 +66,15 @@ public class AuthController {
         if (user == null) {
             return ResponseEntity.status(401).build();
         }
-        UserResponse response = UserResponse.builder()
-                .id(user.getId())
-                .email(user.getEmail())
-                .firstName(user.getFirstName())
-                .lastName(user.getLastName())
-                .avatarUrl(user.getAvatarUrl())
-                .role(user.getRole())
-                .build();
+        UserResponse response =
+                UserResponse.builder()
+                        .id(user.getId())
+                        .email(user.getEmail())
+                        .firstName(user.getFirstName())
+                        .lastName(user.getLastName())
+                        .avatarUrl(user.getAvatarUrl())
+                        .role(user.getRole())
+                        .build();
         return ResponseEntity.ok(response);
     }
 }

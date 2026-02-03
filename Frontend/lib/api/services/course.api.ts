@@ -92,4 +92,11 @@ export class CourseApi {
       params: { page, size },
     })
   }
+
+  /**
+   * Récupérer les cours du professeur connecté (TEACHER uniquement)
+   */
+  static async getMyCourses(): Promise<CourseResponse[]> {
+    return await apiClient.get<CourseResponse[]>('/api/courses/my-courses')
+  }
 }

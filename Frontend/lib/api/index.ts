@@ -9,4 +9,5 @@ export * from './services/enrollment.api'
 export * from './services/file.api'
 export * from './services/assignment.api'
 export * from './services/submission.api'
+export * from './services/material.api'
 

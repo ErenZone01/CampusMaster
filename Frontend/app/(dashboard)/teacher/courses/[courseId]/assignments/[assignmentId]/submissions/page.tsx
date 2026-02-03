@@ -1,14 +1,8 @@
 'use client'
 
 import { useState, useEffect, use } from 'react'
-import { 
-  AssignmentService, 
-  SubmissionService, 
-  GradeService,
-  UserService,
-  AuthService
-} from '@/lib/mock'
-import { useRouter } from 'next/navigation'
+import { AssignmentApi } from '@/lib/api/services/assignment.api'
+import { SubmissionApi, SubmissionResponse } from '@/lib/api/services/submission.api'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -52,293 +46,192 @@ import {
   MessageSquare,
   Edit,
   Save,
+  Eye,
 } from 'lucide-react'
 import Link from 'next/link'
 
-interface Assignment {
+interface AssignmentDetail {
   id: string
   title: string
-  description: string | null
-  due_date: string
-  max_score: number
-  course_id: string
+  instructions: string
+  dueDate: string
+  courseCode: string
+  courseTitle: string
+  filePath?: string | null
 }
 
-interface Student {
-  id: string
-  first_name: string
-  last_name: string
-  email: string
-}
-
-interface Submission {
-  id: string
-  assignment_id: string
-  student_id: string
-  content: string | null
-  file_url: string | null
-  submitted_at: string
-  status: string
-  is_late: boolean
-  student?: Student
-  grade?: {
-    id: string
-    score: number
-    max_score: number
-    feedback: string | null
-    graded_at: string
-  }
-}
-
-interface GradeFormData {
-  submissionId: string
-  score: string
-  feedback: string
-}
-
-export default function SubmissionsPage({
+export default function AssignmentSubmissionsPage({
   params,
 }: {
   params: Promise<{ courseId: string; assignmentId: string }>
 }) {
-  const resolvedParams = use(params)
-  const router = useRouter()
-  
-  const [assignment, setAssignment] = useState<Assignment | null>(null)
-  const [submissions, setSubmissions] = useState<Submission[]>([])
+  const { courseId, assignmentId } = use(params)
+  const [assignment, setAssignment] = useState<AssignmentDetail | null>(null)
+  const [submissions, setSubmissions] = useState<SubmissionResponse[]>([])
   const [loading, setLoading] = useState(true)
-  const [grading, setGrading] = useState(false)
-  const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null)
-  const [gradeForm, setGradeForm] = useState<GradeFormData>({
-    submissionId: '',
-    score: '',
-    feedback: '',
-  })
+  const [gradingSubmission, setGradingSubmission] = useState<SubmissionResponse | null>(null)
   const [filterStatus, setFilterStatus] = useState<string>('all')
+  const [previewFile, setPreviewFile] = useState<{ url: string; title: string } | null>(null)
+
+  // Helper function to get file URL
+  const getFileUrl = (filePath: string) => {
+    if (!filePath) return ''
+    if (filePath.startsWith('http')) return filePath
+    // Add /api/files/ prefix if not present
+    const path = filePath.startsWith('/') ? filePath : `/${filePath}`
+    const apiPath = path.startsWith('/api/files') ? path : `/api/files${path}`
+    return `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}${apiPath}`
+  }
 
   useEffect(() => {
     fetchData()
-  }, [resolvedParams.assignmentId])
+  }, [assignmentId])
 
   async function fetchData() {
     try {
-      setLoading(true)
-
-      // Vérifier que l'utilisateur est enseignant
-      const userResult = await AuthService.getCurrentUser()
-      if (!userResult.success || !userResult.data) {
-        router.push('/login')
-        return
-      }
-
-      // Récupérer l'assignment
-      const assignmentResult = await AssignmentService.getAssignmentById(resolvedParams.assignmentId)
-      if (!assignmentResult.success || !assignmentResult.data) {
-        toast.error('Devoir introuvable')
-        router.back()
-        return
-      }
-      setAssignment(assignmentResult.data)
-
-      // Récupérer les soumissions
-      const submissionsResult = await SubmissionService.getSubmissions({
-        assignment_id: resolvedParams.assignmentId,
+      // Fetch assignment
+      const assignmentData = await AssignmentApi.getAssignmentById(parseInt(assignmentId))
+      setAssignment({
+        id: assignmentData.id.toString(),
+        title: assignmentData.title,
+        instructions: assignmentData.instructions,
+        dueDate: assignmentData.dueDate,
+        courseCode: assignmentData.courseCode,
+        courseTitle: assignmentData.courseTitle,
+        filePath: assignmentData.filePath,
       })
 
-      if (submissionsResult.data) {
-        const submissionsData = submissionsResult.data
-
-        // Enrichir avec les données des étudiants et notes
-        const enrichedSubmissions = await Promise.all(
-          submissionsData.map(async (submission: any) => {
-            const studentResult = await UserService.getUserById(submission.student_id)
-            const student = studentResult.success ? studentResult.data : null
-
-            // Récupérer la note si elle existe
-            const gradesResult = await GradeService.getGradesByAssignment(resolvedParams.assignmentId)
-            const grade = gradesResult.success && gradesResult.data
-              ? gradesResult.data.find((g: any) => g.student_id === submission.student_id)
-              : null
-
-            return {
-              ...submission,
-              student,
-              grade,
-            }
-          })
-        )
-
-        setSubmissions(enrichedSubmissions)
-      }
+      // Fetch submissions
+      const submissionsData = await SubmissionApi.getSubmissionsByAssignment(parseInt(assignmentId))
+      setSubmissions(submissionsData)
     } catch (error) {
       console.error('Error fetching data:', error)
-      toast.error('Erreur lors du chargement')
+      toast.error('Erreur lors du chargement des données')
     } finally {
       setLoading(false)
     }
   }
 
-  function openGradeDialog(submission: Submission) {
-    setSelectedSubmission(submission)
-    setGradeForm({
-      submissionId: submission.id,
-      score: submission.grade?.score?.toString() || '',
-      feedback: submission.grade?.feedback || '',
-    })
-  }
-
-  async function handleGradeSubmission() {
-    if (!selectedSubmission || !assignment) return
-
-    const score = parseFloat(gradeForm.score)
-    if (isNaN(score) || score < 0 || score > assignment.max_score) {
-      toast.error(`La note doit être entre 0 et ${assignment.max_score}`)
-      return
-    }
-
-    setGrading(true)
-    try {
-      const userResult = await AuthService.getCurrentUser()
-      if (!userResult.success || !userResult.data) return
-
-      // Utiliser gradeSubmission qui gère à la fois création et mise à jour
-      await GradeService.gradeSubmission({
-        submission_id: selectedSubmission.id,
-        student_id: selectedSubmission.student_id,
-        course_id: assignment.course_id,
-        assignment_id: assignment.id,
-        score,
-        max_score: assignment.max_score,
-        feedback: gradeForm.feedback || undefined,
-        graded_by_id: userResult.data.id,
-      })
-
-      toast.success('Note enregistrée avec succès')
-      setSelectedSubmission(null)
-      fetchData()
-    } catch (error) {
-      console.error('Error grading submission:', error)
-      toast.error('Erreur lors de l\'enregistrement de la note')
-    } finally {
-      setGrading(false)
-    }
-  }
-
-  function getStatusBadge(submission: Submission) {
-    if (submission.grade) {
-      return <Badge className="bg-green-500">Notée</Badge>
-    }
-    if (submission.is_late) {
-      return <Badge variant="destructive">En retard</Badge>
-    }
-    return <Badge variant="secondary">En attente</Badge>
-  }
-
-  function formatDate(dateString: string) {
-    return new Date(dateString).toLocaleDateString('fr-FR', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
-
   const filteredSubmissions = submissions.filter((sub) => {
-    if (filterStatus === 'graded') return !!sub.grade
-    if (filterStatus === 'pending') return !sub.grade
-    if (filterStatus === 'late') return sub.is_late
+    if (filterStatus === 'graded') return sub.grade !== null
+    if (filterStatus === 'pending') return sub.grade === null
+    if (filterStatus === 'late') return sub.isLate
     return true
   })
 
-  const stats = {
-    total: submissions.length,
-    graded: submissions.filter((s) => s.grade).length,
-    pending: submissions.filter((s) => !s.grade).length,
-    late: submissions.filter((s) => s.is_late).length,
-  }
+  const pendingCount = submissions.filter((s) => s.grade === null).length
+  const gradedCount = submissions.filter((s) => s.grade !== null).length
+  const lateCount = submissions.filter((s) => s.isLate).length
 
   if (loading) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-64" />
-        <div className="grid gap-4 md:grid-cols-4">
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-          <Skeleton className="h-24" />
-        </div>
+        <Skeleton className="h-48" />
         <Skeleton className="h-96" />
       </div>
     )
   }
 
-  if (!assignment) return null
+  if (!assignment) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <p className="text-muted-foreground">Devoir non trouvé</p>
+        <Button asChild className="mt-4">
+          <Link href={`/teacher/courses/${courseId}`}>Retour au cours</Link>
+        </Button>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => router.back()}
-            className="mb-2"
-          >
-            <ChevronLeft className="mr-2 h-4 w-4" />
-            Retour
-          </Button>
-          <h1 className="text-2xl font-bold">{assignment.title}</h1>
-          <p className="text-muted-foreground">
-            Date limite: {formatDate(assignment.due_date)} • Note max: {assignment.max_score} points
-          </p>
-        </div>
-      </div>
+      {/* Back Button */}
+      <Button variant="ghost" asChild className="gap-2">
+        <Link href={`/teacher/courses/${courseId}?tab=assignments`}>
+          <ChevronLeft className="h-4 w-4" />
+          Retour au cours
+        </Link>
+      </Button>
 
-      {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Notées
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.graded}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              En attente
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{stats.pending}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              En retard
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{stats.late}</div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Assignment Header */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <div className="space-y-1">
+              <CardTitle className="text-2xl">{assignment.title}</CardTitle>
+              <CardDescription>
+                {assignment.courseCode} - {assignment.courseTitle}
+              </CardDescription>
+            </div>
+            <Badge variant="outline" className="gap-1">
+              <Clock className="h-3 w-3" />
+              Échéance: {new Date(assignment.dueDate).toLocaleDateString('fr-FR', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* Document joint si présent */}
+          {assignment.filePath && (
+            <div className="mb-4 flex items-center gap-2 rounded-lg border bg-muted/30 p-3">
+              <FileText className="h-5 w-5 text-blue-500" />
+              <span className="flex-1 text-sm">Document joint au devoir</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPreviewFile({
+                  url: getFileUrl(assignment.filePath!),
+                  title: `Document - ${assignment.title}`
+                })}
+              >
+                <Eye className="mr-2 h-4 w-4" />
+                Voir
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <a
+                  href={getFileUrl(assignment.filePath)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Télécharger
+                </a>
+              </Button>
+            </div>
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="flex items-center gap-3 rounded-lg border p-3">
+              <FileText className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <p className="text-2xl font-bold">{submissions.length}</p>
+                <p className="text-sm text-muted-foreground">Total soumissions</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 rounded-lg border p-3">
+              <Clock className="h-5 w-5 text-orange-500" />
+              <div>
+                <p className="text-2xl font-bold">{pendingCount}</p>
+                <p className="text-sm text-muted-foreground">En attente</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 rounded-lg border p-3">
+              <CheckCircle className="h-5 w-5 text-green-500" />
+              <div>
+                <p className="text-2xl font-bold">{gradedCount}</p>
+                <p className="text-sm text-muted-foreground">Notées</p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Filters */}
       <div className="flex items-center gap-4">
@@ -347,193 +240,323 @@ export default function SubmissionsPage({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Toutes ({stats.total})</SelectItem>
-            <SelectItem value="graded">Notées ({stats.graded})</SelectItem>
-            <SelectItem value="pending">En attente ({stats.pending})</SelectItem>
-            <SelectItem value="late">En retard ({stats.late})</SelectItem>
+            <SelectItem value="all">Toutes ({submissions.length})</SelectItem>
+            <SelectItem value="graded">Notées ({gradedCount})</SelectItem>
+            <SelectItem value="pending">En attente ({pendingCount})</SelectItem>
+            <SelectItem value="late">En retard ({lateCount})</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
-      {/* Submissions Table */}
+      {/* Submissions List */}
       <Card>
         <CardHeader>
-          <CardTitle>Soumissions</CardTitle>
+          <CardTitle>Soumissions des étudiants</CardTitle>
           <CardDescription>
-            Liste des soumissions des étudiants pour ce devoir
+            {submissions.length === 0
+              ? 'Aucune soumission pour le moment'
+              : `${pendingCount} soumission${pendingCount > 1 ? 's' : ''} en attente de correction`}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {filteredSubmissions.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <FileText className="h-12 w-12 text-muted-foreground/50" />
-              <h3 className="mt-4 text-lg font-medium">Aucune soumission</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {filterStatus !== 'all'
-                  ? 'Aucune soumission ne correspond aux filtres'
-                  : 'Aucun étudiant n\'a encore soumis ce devoir'}
-              </p>
+            <div className="py-8 text-center text-muted-foreground">
+              {filterStatus !== 'all'
+                ? 'Aucune soumission ne correspond aux filtres'
+                : 'Aucune soumission reçue'}
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Étudiant</TableHead>
-                  <TableHead>Date de soumission</TableHead>
-                  <TableHead>Statut</TableHead>
-                  <TableHead>Note</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredSubmissions.map((submission) => (
-                  <TableRow key={submission.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback>
-                            {submission.student?.first_name?.[0]}
-                            {submission.student?.last_name?.[0]}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="font-medium">
-                            {submission.student?.first_name} {submission.student?.last_name}
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            {submission.student?.email}
-                          </div>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
+            <div className="space-y-3">
+              {filteredSubmissions.map((submission) => (
+                <div
+                  key={submission.id}
+                  className="flex items-center justify-between rounded-lg border p-4"
+                >
+                  <div className="flex items-center gap-4 flex-1">
+                    <Avatar className="h-10 w-10">
+                      <AvatarFallback>
+                        {submission.studentName
+                          .split(' ')
+                          .map((n) => n[0])
+                          .join('')
+                          .toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                        {formatDate(submission.submitted_at)}
+                        <p className="font-medium">{submission.studentName}</p>
+                        {submission.isLate && (
+                          <Badge variant="destructive" className="gap-1">
+                            <XCircle className="h-3 w-3" />
+                            En retard
+                          </Badge>
+                        )}
+                        {submission.grade !== null ? (
+                          <Badge className="bg-green-500/10 text-green-600 gap-1">
+                            <CheckCircle className="h-3 w-3" />
+                            Noté
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="gap-1">
+                            <Clock className="h-3 w-3" />
+                            En attente
+                          </Badge>
+                        )}
                       </div>
-                    </TableCell>
-                    <TableCell>{getStatusBadge(submission)}</TableCell>
-                    <TableCell>
-                      {submission.grade ? (
-                        <div className="font-medium">
-                          {submission.grade.score} / {assignment.max_score}
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openGradeDialog(submission)}
+                      <p className="text-sm text-muted-foreground">
+                        Soumis le {new Date(submission.submittedAt).toLocaleDateString('fr-FR', {
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                        {submission.grade !== null && (
+                          <span className="ml-2">• Note: {submission.grade}/20</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    {submission.filePath && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPreviewFile({
+                            url: getFileUrl(submission.filePath),
+                            title: `Soumission de ${submission.studentName}`
+                          })}
+                        >
+                          <Eye className="mr-2 h-4 w-4" />
+                          Voir
+                        </Button>
+                        <Button variant="outline" size="sm" asChild>
+                          <a
+                            href={getFileUrl(submission.filePath)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download
                           >
-                            {submission.grade ? (
-                              <>
-                                <Edit className="mr-2 h-4 w-4" />
-                                Modifier
-                              </>
-                            ) : (
-                              <>
-                                <MessageSquare className="mr-2 h-4 w-4" />
-                                Noter
-                              </>
-                            )}
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-2xl">
-                          <DialogHeader>
-                            <DialogTitle>
-                              {submission.grade ? 'Modifier la note' : 'Noter la soumission'}
-                            </DialogTitle>
-                            <DialogDescription>
-                              Étudiant: {submission.student?.first_name}{' '}
-                              {submission.student?.last_name}
-                            </DialogDescription>
-                          </DialogHeader>
-
-                          <div className="space-y-4">
-                            {/* Contenu de la soumission */}
-                            <div>
-                              <Label>Contenu de la soumission</Label>
-                              <div className="mt-2 rounded-md border bg-muted p-4">
-                                {submission.content || 'Aucun contenu texte'}
-                              </div>
-                              {submission.file_url && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="mt-2"
-                                  asChild
-                                >
-                                  <a
-                                    href={submission.file_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                  >
-                                    <Download className="mr-2 h-4 w-4" />
-                                    Télécharger le fichier
-                                  </a>
-                                </Button>
-                              )}
-                            </div>
-
-                            {/* Note */}
-                            <div>
-                              <Label htmlFor="score">
-                                Note (sur {assignment.max_score})
-                              </Label>
-                              <Input
-                                id="score"
-                                type="number"
-                                min="0"
-                                max={assignment.max_score}
-                                step="0.5"
-                                value={gradeForm.score}
-                                onChange={(e) =>
-                                  setGradeForm({ ...gradeForm, score: e.target.value })
-                                }
-                                placeholder={`0 - ${assignment.max_score}`}
-                              />
-                            </div>
-
-                            {/* Feedback */}
-                            <div>
-                              <Label htmlFor="feedback">Commentaire</Label>
-                              <Textarea
-                                id="feedback"
-                                rows={4}
-                                value={gradeForm.feedback}
-                                onChange={(e) =>
-                                  setGradeForm({ ...gradeForm, feedback: e.target.value })
-                                }
-                                placeholder="Ajoutez un commentaire pour l'étudiant..."
-                              />
-                            </div>
-                          </div>
-
-                          <DialogFooter>
-                            <Button
-                              type="button"
-                              onClick={handleGradeSubmission}
-                              disabled={grading || !gradeForm.score}
-                            >
-                              <Save className="mr-2 h-4 w-4" />
-                              {grading ? 'Enregistrement...' : 'Enregistrer la note'}
-                            </Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                            <Download className="mr-2 h-4 w-4" />
+                            Télécharger
+                          </a>
+                        </Button>
+                      </>
+                    )}
+                    <Button
+                      variant={submission.grade === null ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setGradingSubmission(submission)}
+                    >
+                      <Edit className="mr-2 h-4 w-4" />
+                      {submission.grade === null ? 'Noter' : 'Modifier la note'}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Grading Dialog */}
+      {gradingSubmission && (
+        <GradeSubmissionDialog
+          open={!!gradingSubmission}
+          onOpenChange={(open) => !open && setGradingSubmission(null)}
+          submission={gradingSubmission}
+          onSuccess={() => {
+            setGradingSubmission(null)
+            fetchData()
+          }}
+          getFileUrl={getFileUrl}
+        />
+      )}
+
+      {/* File Preview Dialog */}
+      <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              {previewFile?.title}
+            </DialogTitle>
+            <DialogDescription>
+              Prévisualisation du fichier soumis
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-end mb-2">
+            {previewFile && (
+              <Button variant="outline" size="sm" asChild>
+                <a href={previewFile.url} download target="_blank" rel="noopener noreferrer">
+                  <Download className="h-4 w-4 mr-2" />
+                  Télécharger
+                </a>
+              </Button>
+            )}
+          </div>
+          <div className="flex-1 overflow-auto min-h-0">
+            {previewFile && (
+              <>
+                {previewFile.url.toLowerCase().includes('.pdf') ? (
+                  <iframe
+                    src={previewFile.url}
+                    className="w-full h-[70vh] border-0"
+                    title={previewFile.title}
+                  />
+                ) : /\.(png|jpg|jpeg|gif|webp)/i.test(previewFile.url) ? (
+                  <div className="flex items-center justify-center p-4">
+                    <img
+                      src={previewFile.url}
+                      alt={previewFile.title}
+                      className="max-w-full max-h-[70vh] object-contain rounded-lg"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                    <FileText className="h-16 w-16 mb-4" />
+                    <p>Aperçu non disponible pour ce type de fichier</p>
+                    <Button variant="outline" className="mt-4" asChild>
+                      <a href={previewFile.url} download target="_blank" rel="noopener noreferrer">
+                        <Download className="h-4 w-4 mr-2" />
+                        Télécharger le fichier
+                      </a>
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
+  )
+}
+
+// Grade Submission Dialog Component
+function GradeSubmissionDialog({
+  open,
+  onOpenChange,
+  submission,
+  onSuccess,
+  getFileUrl,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  submission: SubmissionResponse
+  onSuccess: () => void
+  getFileUrl: (filePath: string) => string
+}) {
+  const [submitting, setSubmitting] = useState(false)
+  const [formData, setFormData] = useState({
+    grade: submission.grade?.toString() || '',
+    feedback: submission.feedback || '',
+  })
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSubmitting(true)
+
+    try {
+      await SubmissionApi.gradeSubmission(
+        submission.id,
+        parseFloat(formData.grade),
+        formData.feedback || undefined
+      )
+
+      toast.success('Note enregistrée avec succès')
+      onSuccess()
+    } catch (error: any) {
+      toast.error(error.message || 'Erreur lors de la notation')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const gradeValue = parseFloat(formData.grade)
+  const isValidGrade = !isNaN(gradeValue) && gradeValue >= 0 && gradeValue <= 20
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Noter la soumission</DialogTitle>
+          <DialogDescription>
+            {submission.studentName} • Soumis le{' '}
+            {new Date(submission.submittedAt).toLocaleDateString('fr-FR')}
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Student Info */}
+          <div className="rounded-lg border p-4 bg-muted/30">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="font-medium">{submission.studentName}</p>
+                <p className="text-sm text-muted-foreground">{submission.studentEmail}</p>
+              </div>
+              {submission.isLate && (
+                <Badge variant="destructive" className="gap-1">
+                  <XCircle className="h-3 w-3" />
+                  Soumis en retard
+                </Badge>
+              )}
+            </div>
+            {submission.filePath && (
+              <Button variant="outline" size="sm" asChild className="w-full">
+                <a
+                  href={getFileUrl(submission.filePath)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Télécharger la soumission
+                </a>
+              </Button>
+            )}
+          </div>
+
+          {/* Grade Input */}
+          <div className="space-y-2">
+            <Label htmlFor="grade">Note (sur 20) *</Label>
+            <Input
+              id="grade"
+              type="number"
+              step="0.5"
+              min="0"
+              max="20"
+              value={formData.grade}
+              onChange={(e) => setFormData({ ...formData, grade: e.target.value })}
+              placeholder="Ex: 15.5"
+              required
+            />
+            {formData.grade && !isValidGrade && (
+              <p className="text-sm text-destructive">La note doit être entre 0 et 20</p>
+            )}
+          </div>
+
+          {/* Feedback */}
+          <div className="space-y-2">
+            <Label htmlFor="feedback">Commentaire / Feedback</Label>
+            <Textarea
+              id="feedback"
+              value={formData.feedback}
+              onChange={(e) => setFormData({ ...formData, feedback: e.target.value })}
+              placeholder="Ajoutez vos commentaires pour l'étudiant..."
+              rows={5}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Annuler
+            </Button>
+            <Button type="submit" disabled={submitting || !isValidGrade}>
+              {submitting ? 'Enregistrement...' : 'Enregistrer la note'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }

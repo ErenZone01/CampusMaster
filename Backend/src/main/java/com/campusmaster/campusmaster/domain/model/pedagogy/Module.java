@@ -1,9 +1,6 @@
 package com.campusmaster.campusmaster.domain.model.pedagogy;
 
-import java.util.List;
-
 import com.campusmaster.campusmaster.domain.model.user.Teacher;
-
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -17,6 +14,7 @@ import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -53,10 +51,8 @@ public class Module {
     // 🔗 Module ↔ Teacher7
     @ManyToMany
     @JoinTable(
-        name = "module_teachers",
-        joinColumns = @JoinColumn(name = "module_id"),
-        inverseJoinColumns = @JoinColumn(name = "teacher_id")
-    )
+            name = "module_teachers",
+            joinColumns = @JoinColumn(name = "module_id"),
+            inverseJoinColumns = @JoinColumn(name = "teacher_id"))
     private List<Teacher> teachers;
-
 }

@@ -1,5 +1,16 @@
 package com.campusmaster.campusmaster.presentation.controller;
 
+import com.campusmaster.campusmaster.application.dto.CourseResponse;
+import com.campusmaster.campusmaster.application.dto.CreateCourseRequest;
+import com.campusmaster.campusmaster.application.dto.UpdateCourseRequest;
+import com.campusmaster.campusmaster.application.service.CourseService;
+import com.campusmaster.campusmaster.application.service.FileStorageService;
+import com.campusmaster.campusmaster.domain.model.course.CourseStatus;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -20,19 +31,6 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.campusmaster.campusmaster.application.dto.CourseResponse;
-import com.campusmaster.campusmaster.application.dto.CreateCourseRequest;
-import com.campusmaster.campusmaster.application.dto.UpdateCourseRequest;
-import com.campusmaster.campusmaster.application.service.CourseService;
-import com.campusmaster.campusmaster.application.service.FileStorageService;
-import com.campusmaster.campusmaster.domain.model.course.CourseStatus;
-
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
-
 @RestController
 @RequestMapping("/api/courses")
 @Tag(name = "Courses", description = "Gestion des cours")
@@ -45,7 +43,9 @@ public class CourseController {
 
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER', 'STUDENT')")
-    @Operation(summary = "Liste des cours", description = "Récupérer tous les cours avec filtres optionnels")
+    @Operation(
+            summary = "Liste des cours",
+            description = "Récupérer tous les cours avec filtres optionnels")
     public ResponseEntity<Page<CourseResponse>> getAllCourses(
             @RequestParam(required = false) Long teacherId,
             @RequestParam(required = false) Long departmentId,
@@ -55,13 +55,15 @@ public class CourseController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "DESC") String sortDir) {
-        
-        Sort sort = sortDir.equalsIgnoreCase("ASC") 
-            ? Sort.by(sortBy).ascending() 
-            : Sort.by(sortBy).descending();
-        
+
+        Sort sort =
+                sortDir.equalsIgnoreCase("ASC")
+                        ? Sort.by(sortBy).ascending()
+                        : Sort.by(sortBy).descending();
+
         Pageable pageable = PageRequest.of(page, size, sort);
-        Page<CourseResponse> courses = courseService.getAllCourses(teacherId, departmentId, semesterId, status, pageable);
+        Page<CourseResponse> courses =
+                courseService.getAllCourses(teacherId, departmentId, semesterId, status, pageable);
         return ResponseEntity.ok(courses);
     }
 
@@ -76,25 +78,28 @@ public class CourseController {
     @PostMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     @Operation(summary = "Créer un cours", description = "Créer un nouveau cours")
-    public ResponseEntity<CourseResponse> createCourse(@Valid @RequestBody CreateCourseRequest request) {
+    public ResponseEntity<CourseResponse> createCourse(
+            @Valid @RequestBody CreateCourseRequest request) {
         CourseResponse course = courseService.createCourse(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(course);
     }
 
     @PostMapping(value = "/{id}/cover", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
-    @Operation(summary = "Upload cover image", description = "Uploader une image de couverture pour un cours")
+    @Operation(
+            summary = "Upload cover image",
+            description = "Uploader une image de couverture pour un cours")
     public ResponseEntity<CourseResponse> uploadCoverImage(
-            @PathVariable Long id,
-            @RequestPart("file") MultipartFile file) {
-        
+            @PathVariable Long id, @RequestPart("file") MultipartFile file) {
+
         if (file.isEmpty()) {
             return ResponseEntity.badRequest().build();
         }
 
         String allowedTypes = "image/jpeg,image/png,image/jpg,image/webp";
         if (!allowedTypes.contains(file.getContentType())) {
-            throw new IllegalArgumentException("Type de fichier non autorisé. Formats acceptés: JPG, PNG, WEBP");
+            throw new IllegalArgumentException(
+                    "Type de fichier non autorisé. Formats acceptés: JPG, PNG, WEBP");
         }
 
         if (file.getSize() > 5 * 1024 * 1024) {
@@ -104,9 +109,8 @@ public class CourseController {
         String filename = fileStorageService.storeFile(file, "courses");
         String fileUrl = fileStorageService.getFileUrl(filename);
 
-        UpdateCourseRequest updateRequest = UpdateCourseRequest.builder()
-                .coverImage(fileUrl)
-                .build();
+        UpdateCourseRequest updateRequest =
+                UpdateCourseRequest.builder().coverImage(fileUrl).build();
 
         CourseResponse updatedCourse = courseService.updateCourse(id, updateRequest);
         return ResponseEntity.ok(updatedCourse);
@@ -116,8 +120,7 @@ public class CourseController {
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
     @Operation(summary = "Modifier un cours", description = "Modifier un cours existant")
     public ResponseEntity<CourseResponse> updateCourse(
-            @PathVariable Long id,
-            @Valid @RequestBody UpdateCourseRequest request) {
+            @PathVariable Long id, @Valid @RequestBody UpdateCourseRequest request) {
         CourseResponse course = courseService.updateCourse(id, request);
         return ResponseEntity.ok(course);
     }
@@ -132,8 +135,17 @@ public class CourseController {
 
     @GetMapping("/teacher/{teacherId}")
     @PreAuthorize("hasAnyRole('ADMIN', 'TEACHER')")
-    @Operation(summary = "Cours d'un enseignant", description = "Récupérer tous les cours d'un enseignant")
+    @Operation(
+            summary = "Cours d'un enseignant",
+            description = "Récupérer tous les cours d'un enseignant")
     public ResponseEntity<?> getCoursesByTeacher(@PathVariable Long teacherId) {
         return ResponseEntity.ok(courseService.getCoursesByTeacher(teacherId));
+    }
+
+    @GetMapping("/my-courses")
+    @PreAuthorize("hasRole('TEACHER')")
+    @Operation(summary = "Mes cours", description = "Récupérer les cours du professeur connecté")
+    public ResponseEntity<?> getMyCourses() {
+        return ResponseEntity.ok(courseService.getMyCourses());
     }
 }

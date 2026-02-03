@@ -1,13 +1,11 @@
 package com.campusmaster.campusmaster.application.dto;
 
-import java.sql.Date;
-
 import com.campusmaster.campusmaster.domain.model.user.Role;
-
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.sql.Date;
 import lombok.Data;
 
 @Data
@@ -26,8 +24,7 @@ public class CreateUserRequest {
     @Size(min = 6, message = "Le mot de passe doit contenir au moins 6 caractères")
     private String password;
 
-    @NotNull(message = "Le rôle est obligatoire")
-    private Role role;
+    @NotNull(message = "Le rôle est obligatoire") private Role role;
 
     // Champs spécifiques pour Student
     private Date dateOfBirth;

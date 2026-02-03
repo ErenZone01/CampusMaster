@@ -1,13 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { 
-  AuthService,
-  CourseService,
-  AssignmentService, 
-  SubmissionService,
-  UserService
-} from '@/lib/mock'
+import { SubmissionApi, SubmissionResponse } from '@/lib/api/services/submission.api'
+import { CourseApi, CourseResponse } from '@/lib/api/services/course.api'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -15,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { toast } from 'sonner'
 import {
   Table,
   TableBody,
@@ -37,19 +33,9 @@ import {
   Search,
   CheckCircle,
 } from 'lucide-react'
-import Link from 'next/link'
 
-interface PendingSubmission {
-  submissionId: string
-  assignmentId: string
-  assignmentTitle: string
-  courseCode: string
-  courseName: string
-  studentName: string
-  studentEmail: string
-  submittedAt: string
-  isLate: boolean
-  dueDate: string
+interface PendingSubmission extends SubmissionResponse {
+  courseName?: string
 }
 
 export default function TeacherCorrectionsPage() {
@@ -58,81 +44,38 @@ export default function TeacherCorrectionsPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterCourse, setFilterCourse] = useState<string>('all')
-  const [courses, setCourses] = useState<Array<{ id: string; code: string; name: string }>>([])
+  const [courses, setCourses] = useState<CourseResponse[]>([])
 
   useEffect(() => {
     fetchPendingSubmissions()
+    fetchCourses()
   }, [])
+
+  async function fetchCourses() {
+    try {
+      const coursesData = await CourseApi.getMyCourses()
+      setCourses(coursesData)
+    } catch (error) {
+      console.error('Error fetching courses:', error)
+    }
+  }
 
   async function fetchPendingSubmissions() {
     try {
       setLoading(true)
 
-      // Récupérer l'utilisateur actuel
-      const userResult = await AuthService.getCurrentUser()
-      if (!userResult.success || !userResult.data) {
-        router.push('/login')
-        return
-      }
-
-      // Récupérer les cours de l'enseignant
-      const coursesResult = await CourseService.getCourses({ teacher_id: userResult.data.id })
-      if (!coursesResult.success) return
-
-      const teacherCourses = coursesResult.data?.data || []
-      setCourses(teacherCourses.map((c: any) => ({ id: c.id, code: c.code, name: c.name })))
-
-      // Récupérer tous les assignments de ces cours
-      const allSubmissions: PendingSubmission[] = []
-
-      for (const course of teacherCourses) {
-        const assignmentsResult = await AssignmentService.getAssignmentsByCourse(course.id)
-        const assignments = assignmentsResult.data || []
-
-        for (const assignment of assignments) {
-          // Récupérer les soumissions pour cet assignment
-          const submissionsResult = await SubmissionService.getSubmissions({
-            assignment_id: assignment.id,
-          })
-          const assignmentSubmissions = submissionsResult.data || []
-
-          // Filtrer les soumissions non notées
-          const pendingSubmissions = assignmentSubmissions.filter(
-            (sub: any) => sub.status !== 'graded'
-          )
-
-          // Enrichir avec les infos de l'étudiant
-          for (const submission of pendingSubmissions) {
-            const studentResult = await UserService.getUserById(submission.student_id)
-            const student = studentResult.success ? studentResult.data : null
-
-            if (student) {
-              const isLate = new Date(submission.submitted_at) > new Date(assignment.due_date)
-              allSubmissions.push({
-                submissionId: submission.id,
-                assignmentId: assignment.id,
-                assignmentTitle: assignment.title,
-                courseCode: course.code,
-                courseName: course.name,
-                studentName: `${student.first_name} ${student.last_name}`,
-                studentEmail: student.email,
-                submittedAt: submission.submitted_at,
-                isLate: isLate,
-                dueDate: assignment.due_date,
-              })
-            }
-          }
-        }
-      }
-
+      // Récupérer les soumissions en attente depuis l'API
+      const pendingSubmissions = await SubmissionApi.getPendingSubmissions()
+      
       // Trier par date de soumission (plus récentes d'abord)
-      allSubmissions.sort(
+      pendingSubmissions.sort(
         (a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
       )
 
-      setSubmissions(allSubmissions)
+      setSubmissions(pendingSubmissions)
     } catch (error) {
       console.error('Error fetching pending submissions:', error)
+      toast.error('Erreur lors du chargement des soumissions')
     } finally {
       setLoading(false)
     }
@@ -246,7 +189,7 @@ export default function TeacherCorrectionsPage() {
             <SelectItem value="all">Tous les cours</SelectItem>
             {courses.map((course) => (
               <SelectItem key={course.id} value={course.code}>
-                {course.code} - {course.name}
+                {course.code} - {course.title}
               </SelectItem>
             ))}
           </SelectContent>
@@ -303,16 +246,12 @@ export default function TeacherCorrectionsPage() {
 
                   return (
                     <TableRow
-                      key={submission.submissionId}
+                      key={submission.id}
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => {
-                        // Trouver le courseId correspondant
-                        const course = courses.find((c) => c.code === submission.courseCode)
-                        if (course) {
-                          router.push(
-                            `/teacher/courses/${course.id}/assignments/${submission.assignmentId}/submissions`
-                          )
-                        }
+                        router.push(
+                          `/teacher/courses/${submission.courseId}/assignments/${submission.assignmentId}/submissions`
+                        )
                       }}
                     >
                       <TableCell>
@@ -366,12 +305,9 @@ export default function TeacherCorrectionsPage() {
                           variant="outline"
                           onClick={(e) => {
                             e.stopPropagation()
-                            const course = courses.find((c) => c.code === submission.courseCode)
-                            if (course) {
-                              router.push(
-                                `/teacher/courses/${course.id}/assignments/${submission.assignmentId}/submissions`
-                              )
-                            }
+                            router.push(
+                              `/teacher/courses/${submission.courseId}/assignments/${submission.assignmentId}/submissions`
+                            )
                           }}
                         >
                           Corriger

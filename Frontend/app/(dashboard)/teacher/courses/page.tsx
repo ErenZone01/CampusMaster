@@ -67,17 +67,9 @@ export default function TeacherCoursesPage() {
 
   async function fetchCourses() {
     try {
-      const user = await AuthApi.getCurrentUser()
-      if (!user) return
-
-      // Récupérer tous les cours du professeur avec pagination
-      const coursesResponse = await CourseApi.getAllCourses({
-        teacherId: user.id,
-        page: 0,
-        size: 100, // Récupérer tous les cours
-      })
-
-      const coursesData = coursesResponse.content || []
+      // Récupérer uniquement les cours assignés au professeur connecté
+      const coursesResponse = await CourseApi.getMyCourses()
+      const coursesData = coursesResponse || []
 
       // Pour chaque cours, récupérer le nombre réel d'assignments
       const coursesWithAssignments = await Promise.all(

@@ -31,6 +31,7 @@ import {
   PlusCircle,
   ClipboardList,
   CheckSquare,
+  Search,
 } from 'lucide-react'
 import type { UserRole } from '@/types'
 import { useAuth } from '@/hooks/use-auth'
@@ -43,8 +44,10 @@ interface NavItem {
 }
 
 const studentNavItems: NavItem[] = [
-  { title: 'Emploi du temps', href: '/student', icon: Calendar },
+  { title: 'Tableau de bord', href: '/student', icon: Home },
+  { title: 'Emploi du temps', href: '/student/schedule', icon: Calendar },
   { title: 'Mes cours', href: '/student/courses', icon: BookOpen },
+  { title: 'Découvrir', href: '/student/discover', icon: Search },
   { title: 'Mes notes', href: '/student/grades', icon: FileText },
 ]
 

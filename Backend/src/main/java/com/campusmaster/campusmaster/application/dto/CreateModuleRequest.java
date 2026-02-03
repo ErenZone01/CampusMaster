@@ -1,10 +1,9 @@
 package com.campusmaster.campusmaster.application.dto;
 
-import java.util.List;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Semester;
-
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -17,14 +16,10 @@ import lombok.Setter;
 @NoArgsConstructor
 @Builder
 public class CreateModuleRequest {
-    @NotBlank
-    private String name;
-    @NotBlank
-    private String code;
-    @NotNull
-    private Semester semester;
-    @NotBlank
-    private String department;
+    @NotBlank private String name;
+    @NotBlank private String code;
+    @NotNull private Semester semester;
+    @NotBlank private String department;
 
     private List<Long> teachers;
 }

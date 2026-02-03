@@ -11,10 +11,10 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class UpdateDepartmentRequest {
-    
+
     @NotBlank(message = "Le nom du département est requis")
     private String name;
-    
+
     @NotBlank(message = "Le code du département est requis")
     private String code;
 }

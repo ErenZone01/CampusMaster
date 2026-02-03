@@ -1,9 +1,7 @@
 package com.campusmaster.campusmaster.application.dto;
 
-import java.time.LocalDateTime;
-
 import com.campusmaster.campusmaster.domain.model.assigment.Assignment;
-
+import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -23,6 +21,7 @@ public class AssignmentResponse {
     private String courseTitle;
     private Long teacherId;
     private String teacherName;
+    private String filePath;
     private Integer submissionCount;
     private Integer pendingSubmissions;
     private LocalDateTime createdAt;
@@ -37,11 +36,22 @@ public class AssignmentResponse {
                 .courseCode(assignment.getCourse().getCode())
                 .courseTitle(assignment.getCourse().getTitle())
                 .teacherId(assignment.getTeacher().getId())
-                .teacherName(assignment.getTeacher().getFirstName() + " " + assignment.getTeacher().getLastName())
-                .submissionCount(assignment.getSubmissions() != null ? assignment.getSubmissions().size() : 0)
-                .pendingSubmissions(assignment.getSubmissions() != null 
-                    ? (int) assignment.getSubmissions().stream().filter(s -> s.getGrade() == null).count() 
-                    : 0)
+                .teacherName(
+                        assignment.getTeacher().getFirstName()
+                                + " "
+                                + assignment.getTeacher().getLastName())
+                .filePath(assignment.getFilePath())
+                .submissionCount(
+                        assignment.getSubmissions() != null
+                                ? assignment.getSubmissions().size()
+                                : 0)
+                .pendingSubmissions(
+                        assignment.getSubmissions() != null
+                                ? (int)
+                                        assignment.getSubmissions().stream()
+                                                .filter(s -> s.getGrade() == null)
+                                                .count()
+                                : 0)
                 .build();
     }
 }

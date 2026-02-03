@@ -1,175 +1,168 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { AuthService, EnrollmentService, ScheduleService, CourseService } from '@/lib/mock'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { EnrollmentApi, CourseApi, SubmissionApi, AssignmentApi } from '@/lib/api/services'
+import type { CourseResponse, EnrollmentResponse, SubmissionResponse } from '@/lib/api/services'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ChevronLeft, ChevronRight, Calendar, Clock, MapPin } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { StatsCard } from '@/components/dashboard/stats-card'
+import Link from 'next/link'
+import { 
+  BookOpen, 
+  Clock, 
+  FileText, 
+  TrendingUp, 
+  CheckCircle,
+  AlertCircle,
+  Calendar
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useRequireAuth } from '@/hooks/use-auth'
 
-interface ScheduleEvent {
-  id: string
-  title: string
-  description: string | null
-  start_time: string
-  end_time: string
-  location: string | null
-  course_id: string
-  course: {
-    code: string
-    name: string
-  }
+interface StudentStats {
+  enrolledCourses: number
+  submittedAssignments: number
+  pendingAssignments: number
+  averageGrade: number
 }
 
-const DAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
-const HOURS = Array.from({ length: 12 }, (_, i) => i + 8) // 8h to 19h
+interface EnrolledCourse extends CourseResponse {
+  pendingAssignments: number
+}
 
 export default function StudentDashboardPage() {
   const router = useRouter()
   const { user, isLoading: authLoading } = useRequireAuth(['student'])
-  const [events, setEvents] = useState<ScheduleEvent[]>([])
+  const [stats, setStats] = useState<StudentStats>({
+    enrolledCourses: 0,
+    submittedAssignments: 0,
+    pendingAssignments: 0,
+    averageGrade: 0,
+  })
+  const [courses, setCourses] = useState<EnrolledCourse[]>([])
+  const [recentSubmissions, setRecentSubmissions] = useState<SubmissionResponse[]>([])
+  const [upcomingDeadlines, setUpcomingDeadlines] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [currentDate, setCurrentDate] = useState(new Date())
-  const [view, setView] = useState<'week' | 'day'>('week')
-  const [cachedWeek, setCachedWeek] = useState<string | null>(null)
 
-  // Get week key for caching
-  const getWeekKey = useCallback((date: Date) => {
-    const startOfWeek = new Date(date)
-    startOfWeek.setDate(date.getDate() - date.getDay() + 1)
-    return startOfWeek.toISOString().split('T')[0]
-  }, [])
-
-  const currentWeekKey = useMemo(() => getWeekKey(currentDate), [currentDate, getWeekKey])
-
-  const fetchSchedule = useCallback(async () => {
-    // Don't refetch if we already have this week's data
-    if (cachedWeek === currentWeekKey && events.length > 0) {
-      setLoading(false)
-      return
+  useEffect(() => {
+    if (!authLoading && user) {
+      fetchDashboardData()
     }
+  }, [user, authLoading])
 
+  async function fetchDashboardData() {
     try {
-      const currentUserResponse = await AuthService.getCurrentUser()
-      if (!currentUserResponse?.data) return
-      const currentUser = currentUserResponse.data
+      // Fetch enrollments and submissions in parallel
+      const [enrollments, submissions] = await Promise.all([
+        EnrollmentApi.getMyEnrollments(),
+        SubmissionApi.getMySubmissions()
+      ])
 
-      // Get enrolled course IDs
-      const enrollmentsResponse = await EnrollmentService.getEnrollmentsByStudent(currentUser.id)
-      const enrollments = enrollmentsResponse.data || []
-      const activeEnrollments = enrollments.filter((e: any) => e.status === 'active')
-      const courseIds = activeEnrollments.map((e: any) => e.course_id)
-
-      if (courseIds.length === 0) {
-        setEvents([])
-        setCachedWeek(currentWeekKey)
-        setLoading(false)
-        return
-      }
-
-      // Get start and end of current week
-      const startOfWeek = new Date(currentDate)
-      startOfWeek.setDate(currentDate.getDate() - currentDate.getDay() + 1)
-      startOfWeek.setHours(0, 0, 0, 0)
-      
-      const endOfWeek = new Date(startOfWeek)
-      endOfWeek.setDate(startOfWeek.getDate() + 7)
-
-      const scheduleResponse = await ScheduleService.getScheduleEvents({})
-      const allEvents = scheduleResponse.data || []
-      
-      // Filter events for enrolled courses and current week
-      const filteredEvents = allEvents.filter((e: any) => {
-        const eventTime = new Date(e.start_time)
-        return courseIds.includes(e.course_id) && 
-               eventTime >= startOfWeek && 
-               eventTime < endOfWeek
-      })
-
-      // Enrich with course data
-      const enrichedEvents = await Promise.all(
-        filteredEvents.map(async (e: any) => {
-          const courseResponse = await CourseService.getCourseById(e.course_id)
-          const course = courseResponse.data
-          return {
-            id: e.id,
-            title: e.title,
-            description: e.description,
-            start_time: e.start_time,
-            end_time: e.end_time,
-            location: e.location,
-            course_id: e.course_id,
-            course: course ? { code: course.code, name: course.name } : { code: 'N/A', name: 'Cours' },
+      // Get course details for each enrollment
+      const coursesData = await Promise.all(
+        enrollments.map(async (enrollment) => {
+          try {
+            const course = await CourseApi.getCourseById(enrollment.courseId)
+            // Get assignments for this course
+            const assignments = await AssignmentApi.getAssignmentsByCourse(course.id)
+            const submittedIds = submissions
+              .filter(s => s.courseId === course.id)
+              .map(s => s.assignmentId)
+            const pendingCount = assignments.filter(a => !submittedIds.includes(a.id)).length
+            
+            return {
+              ...course,
+              pendingAssignments: pendingCount
+            } as EnrolledCourse
+          } catch {
+            return null
           }
         })
       )
 
-      setEvents(enrichedEvents)
-      setCachedWeek(currentWeekKey)
+      const validCourses = coursesData.filter((c): c is EnrolledCourse => c !== null)
+      setCourses(validCourses)
+
+      // Calculate stats
+      const gradedSubmissions = submissions.filter(s => s.grade !== null)
+      const averageGrade = gradedSubmissions.length > 0
+        ? Math.round(gradedSubmissions.reduce((sum, s) => sum + (s.grade || 0), 0) / gradedSubmissions.length * 10) / 10
+        : 0
+
+      const totalPending = validCourses.reduce((sum, c) => sum + c.pendingAssignments, 0)
+
+      setStats({
+        enrolledCourses: validCourses.length,
+        submittedAssignments: submissions.length,
+        pendingAssignments: totalPending,
+        averageGrade,
+      })
+
+      // Get recent submissions (last 5)
+      const sortedSubmissions = [...submissions]
+        .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime())
+        .slice(0, 5)
+      setRecentSubmissions(sortedSubmissions)
+
+      // Get upcoming deadlines
+      const now = new Date()
+      const allAssignments = await Promise.all(
+        validCourses.map(c => AssignmentApi.getAssignmentsByCourse(c.id))
+      )
+      const flatAssignments = allAssignments.flat()
+      const submittedAssignmentIds = submissions.map(s => s.assignmentId)
+      
+      const upcoming = flatAssignments
+        .filter(a => {
+          const dueDate = new Date(a.dueDate)
+          return dueDate > now && !submittedAssignmentIds.includes(a.id)
+        })
+        .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+        .slice(0, 5)
+        .map(a => ({
+          id: a.id,
+          title: a.title,
+          courseCode: validCourses.find(c => c.id === a.courseId)?.code || '',
+          dueDate: a.dueDate,
+          courseId: a.courseId,
+        }))
+      
+      setUpcomingDeadlines(upcoming)
     } catch (error) {
-      console.error('Error fetching schedule:', error)
+      console.error('Error fetching dashboard data:', error)
     } finally {
       setLoading(false)
     }
-  }, [currentDate, currentWeekKey, cachedWeek, events.length])
-
-  useEffect(() => {
-    if (!authLoading && user) {
-      fetchSchedule()
-    }
-  }, [currentDate, user?.id, authLoading, fetchSchedule])
-
-  function navigateWeek(direction: 'prev' | 'next') {
-    const newDate = new Date(currentDate)
-    newDate.setDate(currentDate.getDate() + (direction === 'next' ? 7 : -7))
-    setCurrentDate(newDate)
   }
 
-  function getWeekDates() {
-    const dates = []
-    const startOfWeek = new Date(currentDate)
-    startOfWeek.setDate(currentDate.getDate() - currentDate.getDay() + 1)
-    
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(startOfWeek)
-      date.setDate(startOfWeek.getDate() + i)
-      dates.push(date)
-    }
-    return dates
-  }
-
-  function getEventsForDay(date: Date) {
-    return events.filter(event => {
-      const eventDate = new Date(event.start_time)
-      return eventDate.toDateString() === date.toDateString()
+  function formatDate(dateString: string) {
+    return new Date(dateString).toLocaleDateString('fr-FR', {
+      day: 'numeric',
+      month: 'short',
     })
   }
 
-  function formatTime(dateString: string) {
-    return new Date(dateString).toLocaleTimeString('fr-FR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  }
-
-  function getEventPosition(event: ScheduleEvent) {
-    const start = new Date(event.start_time)
-    const end = new Date(event.end_time)
-    const startHour = start.getHours() + start.getMinutes() / 60
-    const endHour = end.getHours() + end.getMinutes() / 60
-    const top = (startHour - 8) * 60 // 8h is the start
-    const height = (endHour - startHour) * 60
-    return { top: `${top}px`, height: `${height}px` }
+  function getDaysUntil(dateString: string) {
+    const now = new Date()
+    const due = new Date(dateString)
+    const diff = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    return diff
   }
 
   if (authLoading || loading) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-150" />
+        <div className="grid gap-4 md:grid-cols-4">
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-32" />)}
+        </div>
+        <div className="grid gap-6 md:grid-cols-2">
+          <Skeleton className="h-96" />
+          <Skeleton className="h-96" />
+        </div>
       </div>
     )
   }
@@ -178,125 +171,231 @@ export default function StudentDashboardPage() {
     return null
   }
 
-  const weekDates = getWeekDates()
-  const today = new Date().toDateString()
-
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Emploi du Temps</h1>
+          <h1 className="text-2xl font-bold text-foreground">Espace Étudiant</h1>
           <p className="text-muted-foreground">
-            Semaine du {weekDates[0].toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}
+            Bienvenue, {user.firstName} ! Voici un aperçu de vos cours et devoirs.
           </p>
         </div>
-
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => navigateWeek('prev')}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" onClick={() => setCurrentDate(new Date())}>
-            Aujourd'hui
-          </Button>
-          <Button variant="outline" size="icon" onClick={() => navigateWeek('next')}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
+        <Button asChild>
+          <Link href="/student/courses">
+            <BookOpen className="mr-2 h-4 w-4" />
+            Mes cours
+          </Link>
+        </Button>
       </div>
 
-      {/* Calendar View */}
-      <Card>
-        <CardContent className="p-0">
-          {/* Week Header */}
-          <div className="grid grid-cols-8 border-b">
-            <div className="p-3 text-center text-sm font-medium text-muted-foreground border-r" />
-            {weekDates.map((date, i) => (
-              <div
-                key={i}
-                className={cn(
-                  'p-3 text-center border-r last:border-r-0',
-                  date.toDateString() === today && 'bg-primary/5'
-                )}
-              >
-                <div className="text-sm font-medium text-muted-foreground">{DAYS[i]}</div>
-                <div className={cn(
-                  'text-lg font-semibold',
-                  date.toDateString() === today && 'text-primary'
-                )}>
-                  {date.getDate()}
-                </div>
-              </div>
-            ))}
-          </div>
+      {/* Stats */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <StatsCard
+          title="Cours inscrits"
+          value={stats.enrolledCourses}
+          icon={BookOpen}
+          description="Cours actifs"
+        />
+        <StatsCard
+          title="Devoirs soumis"
+          value={stats.submittedAssignments}
+          icon={FileText}
+          description="Total soumissions"
+        />
+        <StatsCard
+          title="À rendre"
+          value={stats.pendingAssignments}
+          icon={Clock}
+          description="Devoirs en attente"
+        />
+        <StatsCard
+          title="Moyenne"
+          value={stats.averageGrade > 0 ? `${stats.averageGrade}/20` : 'N/A'}
+          icon={TrendingUp}
+          description="Moyenne générale"
+        />
+      </div>
 
-          {/* Time Grid */}
-          <div className="grid grid-cols-8 relative" style={{ minHeight: '720px' }}>
-            {/* Hour Labels */}
-            <div className="border-r">
-              {HOURS.map(hour => (
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Enrolled Courses */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Mes Cours</CardTitle>
+                <CardDescription>Cours auxquels vous êtes inscrit</CardDescription>
+              </div>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/student/courses">Voir tout</Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {courses.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <BookOpen className="h-12 w-12 text-muted-foreground/50" />
+                <p className="mt-4 text-muted-foreground">Aucun cours inscrit</p>
+                <Button asChild className="mt-4">
+                  <Link href="/student/courses">S'inscrire à un cours</Link>
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {courses.slice(0, 4).map((course) => (
+                  <Link
+                    key={course.id}
+                    href={`/student/courses/${course.id}`}
+                    className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary font-semibold text-sm">
+                        {course.code.slice(0, 3)}
+                      </div>
+                      <div>
+                        <p className="font-medium">{course.title}</p>
+                        <p className="text-sm text-muted-foreground">{course.code}</p>
+                      </div>
+                    </div>
+                    {course.pendingAssignments > 0 && (
+                      <Badge variant="secondary">
+                        {course.pendingAssignments} devoir{course.pendingAssignments > 1 ? 's' : ''}
+                      </Badge>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Upcoming Deadlines */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  Échéances à venir
+                  {upcomingDeadlines.length > 0 && (
+                    <Badge variant="destructive">{upcomingDeadlines.length}</Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>Devoirs à rendre</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {upcomingDeadlines.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <CheckCircle className="h-12 w-12 text-green-500" />
+                <p className="mt-4 text-muted-foreground">Aucun devoir en attente</p>
+                <p className="text-sm text-muted-foreground">Vous êtes à jour !</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {upcomingDeadlines.map((deadline) => {
+                  const daysLeft = getDaysUntil(deadline.dueDate)
+                  const isUrgent = daysLeft <= 2
+                  
+                  return (
+                    <Link
+                      key={deadline.id}
+                      href={`/student/courses/${deadline.courseId}`}
+                      className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "flex h-10 w-10 items-center justify-center rounded-full",
+                          isUrgent ? "bg-red-500/10 text-red-600" : "bg-orange-500/10 text-orange-600"
+                        )}>
+                          {isUrgent ? (
+                            <AlertCircle className="h-5 w-5" />
+                          ) : (
+                            <Calendar className="h-5 w-5" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium">{deadline.title}</p>
+                          <p className="text-sm text-muted-foreground">{deadline.courseCode}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <Badge variant={isUrgent ? "destructive" : "secondary"}>
+                          {daysLeft === 0 ? "Aujourd'hui" : daysLeft === 1 ? "Demain" : `${daysLeft} jours`}
+                        </Badge>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {formatDate(deadline.dueDate)}
+                        </p>
+                      </div>
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Submissions */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Soumissions récentes</CardTitle>
+              <CardDescription>Vos derniers travaux soumis</CardDescription>
+            </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/student/grades">Voir mes notes</Link>
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {recentSubmissions.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <FileText className="h-12 w-12 text-muted-foreground/50" />
+              <p className="mt-4 text-muted-foreground">Aucune soumission</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {recentSubmissions.map((submission) => (
                 <div
-                  key={hour}
-                  className="h-15 pr-2 text-right text-xs text-muted-foreground"
-                  style={{ lineHeight: '60px' }}
+                  key={submission.id}
+                  className="flex items-center justify-between rounded-lg border p-3"
                 >
-                  {hour}:00
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "flex h-10 w-10 items-center justify-center rounded-full",
+                      submission.grade !== null 
+                        ? "bg-green-500/10 text-green-600" 
+                        : "bg-yellow-500/10 text-yellow-600"
+                    )}>
+                      {submission.grade !== null ? (
+                        <CheckCircle className="h-5 w-5" />
+                      ) : (
+                        <Clock className="h-5 w-5" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-medium">{submission.assignmentTitle}</p>
+                      <p className="text-sm text-muted-foreground">{submission.courseCode}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    {submission.grade !== null ? (
+                      <Badge variant="outline" className="text-green-600">
+                        {submission.grade}/20
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">En attente</Badge>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {formatDate(submission.submittedAt)}
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>
-
-            {/* Day Columns */}
-            {weekDates.map((date, dayIndex) => {
-              const dayEvents = getEventsForDay(date)
-              return (
-                <div
-                  key={dayIndex}
-                  className={cn(
-                    'relative border-r last:border-r-0',
-                    date.toDateString() === today && 'bg-primary/5'
-                  )}
-                >
-                  {/* Hour Lines */}
-                  {HOURS.map(hour => (
-                    <div
-                      key={hour}
-                      className="h-15 border-b border-dashed border-border/50"
-                    />
-                  ))}
-
-                  {/* Events */}
-                  {dayEvents.map(event => {
-                    const position = getEventPosition(event)
-                    return (
-                      <div
-                        key={event.id}
-                        onClick={() => router.push(`/student/courses/${event.course_id}`)}
-                        className="absolute left-1 right-1 rounded-md bg-primary/10 border-l-4 border-primary p-2 overflow-hidden cursor-pointer hover:bg-primary/20 transition-colors"
-                        style={position}
-                      >
-                        <div className="text-xs font-semibold text-primary truncate">
-                          {event.course?.code}
-                        </div>
-                        <div className="text-xs text-foreground truncate">
-                          {event.title}
-                        </div>
-                        <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                          <Clock className="h-3 w-3" />
-                          {formatTime(event.start_time)}
-                        </div>
-                        {event.location && (
-                          <div className="text-xs text-muted-foreground flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
-                            {event.location}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )
-            })}
-          </div>
+          )}
         </CardContent>
       </Card>
     </div>

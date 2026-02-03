@@ -1,15 +1,13 @@
 package com.campusmaster.campusmaster.domain.model.assigment;
 
+import com.campusmaster.campusmaster.domain.model.course.Course;
+import com.campusmaster.campusmaster.domain.model.user.Teacher;
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
+import java.util.List;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.time.LocalDateTime;
-import java.util.List;
-
-import com.campusmaster.campusmaster.domain.model.course.Course;
-import com.campusmaster.campusmaster.domain.model.user.Teacher;
 
 @Entity
 @Table(name = "assignments")
@@ -30,6 +28,9 @@ public class Assignment {
 
     @Column(nullable = false)
     private LocalDateTime dueDate;
+
+    @Column(name = "file_path")
+    private String filePath;
 
     @ManyToOne(optional = false)
     @JoinColumn(name = "course_id")

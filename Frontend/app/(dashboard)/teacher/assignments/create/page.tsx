@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { AuthService, CourseService, AssignmentService } from '@/lib/mock'
-import { useRequireAuth } from '@/hooks/use-auth'
+import { useState, useEffect, useRef } from 'react'
+import { CourseApi, CourseResponse } from '@/lib/api/services/course.api'
+import { AssignmentApi, CreateAssignmentRequest } from '@/lib/api/services/assignment.api'
+import { FileApi } from '@/lib/api/services/file.api'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -10,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { toast } from 'sonner'
 import {
   Select,
   SelectContent,
@@ -17,28 +19,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, Upload, X, FileText } from 'lucide-react'
 import Link from 'next/link'
 
-interface Course {
-  id: string
-  code: string
-  name: string
-}
-
 export default function CreateAssignmentPage() {
-  useRequireAuth(['teacher'])
-
   const router = useRouter()
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [courses, setCourses] = useState<Course[]>([])
+  const [courses, setCourses] = useState<CourseResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [uploadingFile, setUploadingFile] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [formData, setFormData] = useState({
     title: '',
-    description: '',
-    course_id: '',
-    due_date: '',
+    instructions: '',
+    courseId: '',
+    dueDate: '',
   })
 
   useEffect(() => {
@@ -47,37 +44,73 @@ export default function CreateAssignmentPage() {
 
   const fetchCourses = async () => {
     try {
-      const currentUserResponse = await AuthService.getCurrentUser()
-      if (!currentUserResponse?.data) return
-      const currentUser = currentUserResponse.data
-
-      const coursesResponse = await CourseService.getCourses({ teacher_id: currentUser.id })
-      const coursesData = Array.isArray(coursesResponse.data) ? coursesResponse.data : coursesResponse.data?.data || []
-      setCourses(coursesData)
+      // Récupérer uniquement les cours assignés au professeur connecté
+      const response = await CourseApi.getMyCourses()
+      setCourses(response || [])
     } catch (error) {
       console.error('Error fetching courses:', error)
+      toast.error('Erreur lors du chargement des cours')
     } finally {
       setLoading(false)
     }
   }
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Check file size (100MB max)
+      if (file.size > 100 * 1024 * 1024) {
+        toast.error('Le fichier est trop volumineux (max 100MB)')
+        return
+      }
+      setSelectedFile(file)
+    }
+  }
+
+  const removeFile = () => {
+    setSelectedFile(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (!formData.courseId) {
+      toast.error('Veuillez sélectionner un cours')
+      return
+    }
+
     setSaving(true)
 
     try {
-      await AssignmentService.createAssignment({
-        title: formData.title,
-        description: formData.description,
-        course_id: formData.course_id,
-        due_date: formData.due_date,
-      })
+      let filePath: string | undefined
 
+      // Upload file if selected
+      if (selectedFile) {
+        setUploadingFile(true)
+        filePath = await FileApi.uploadFile(selectedFile, 'assignments')
+        setUploadingFile(false)
+      }
+
+      const request: CreateAssignmentRequest = {
+        title: formData.title,
+        instructions: formData.instructions,
+        courseId: parseInt(formData.courseId),
+        dueDate: formData.dueDate,
+        filePath,
+      }
+
+      await AssignmentApi.createAssignment(request)
+      toast.success('Devoir créé avec succès')
       router.push('/teacher/assignments')
     } catch (error) {
       console.error('Error creating assignment:', error)
+      toast.error('Erreur lors de la création du devoir')
     } finally {
       setSaving(false)
+      setUploadingFile(false)
     }
   }
 
@@ -116,16 +149,16 @@ export default function CreateAssignmentPage() {
               <Label htmlFor="course" className="text-base mb-2 block">
                 Cours
               </Label>
-              <Select value={formData.course_id} onValueChange={(value) =>
-                setFormData({ ...formData, course_id: value })
+              <Select value={formData.courseId} onValueChange={(value) =>
+                setFormData({ ...formData, courseId: value })
               }>
                 <SelectTrigger>
                   <SelectValue placeholder="Sélectionnez un cours" />
                 </SelectTrigger>
                 <SelectContent>
                   {courses.map(course => (
-                    <SelectItem key={course.id} value={course.id}>
-                      {course.code} - {course.name}
+                    <SelectItem key={course.id} value={course.id.toString()}>
+                      {course.code} - {course.title}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -148,38 +181,85 @@ export default function CreateAssignmentPage() {
 
             {/* Description */}
             <div>
-              <Label htmlFor="description" className="text-base mb-2 block">
-                Description
+              <Label htmlFor="instructions" className="text-base mb-2 block">
+                Instructions (optionnel)
               </Label>
               <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                id="instructions"
+                value={formData.instructions}
+                onChange={(e) => setFormData({ ...formData, instructions: e.target.value })}
                 placeholder="Décrivez le devoir, les attentes, les consignes..."
                 className="min-h-32"
-                required
               />
             </div>
 
             {/* Due Date */}
             <div>
-              <Label htmlFor="due_date" className="text-base mb-2 block">
+              <Label htmlFor="dueDate" className="text-base mb-2 block">
                 Date limite de remise
               </Label>
               <Input
-                id="due_date"
+                id="dueDate"
                 type="datetime-local"
-                value={formData.due_date}
-                onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+                value={formData.dueDate}
+                onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
                 required
               />
             </div>
 
+            {/* File Upload */}
+            <div>
+              <Label className="text-base mb-2 block">
+                Document (optionnel)
+              </Label>
+              <p className="text-sm text-muted-foreground mb-2">
+                Joignez un document PDF, Word ou autre fichier pour ce devoir
+              </p>
+              
+              {!selectedFile ? (
+                <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.zip,.rar"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    Sélectionner un fichier
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 p-3 border rounded-md bg-muted/50">
+                  <FileText className="h-8 w-8 text-primary" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">{selectedFile.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={removeFile}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+
             {/* Submit Button */}
             <div className="flex gap-3">
-              <Button type="submit" disabled={saving} className="flex-1">
+              <Button type="submit" disabled={saving || uploadingFile} className="flex-1">
                 <Save className="mr-2 h-4 w-4" />
-                {saving ? 'Création...' : 'Créer le devoir'}
+                {uploadingFile ? 'Upload du fichier...' : saving ? 'Création...' : 'Créer le devoir'}
               </Button>
               <Link href="/teacher/assignments" className="flex-1">
                 <Button type="button" variant="outline" className="w-full">

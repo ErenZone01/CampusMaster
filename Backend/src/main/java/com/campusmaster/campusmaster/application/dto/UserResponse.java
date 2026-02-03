@@ -1,9 +1,7 @@
 package com.campusmaster.campusmaster.application.dto;
 
-import java.sql.Date;
-
 import com.campusmaster.campusmaster.domain.model.user.Role;
-
+import java.sql.Date;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -23,7 +21,7 @@ public class UserResponse {
     private String avatarUrl;
     private Role role;
     private Boolean enabled;
-    
+
     // Champs spécifiques pour Student
     private Date dateOfBirth;
     private Long departmentId;

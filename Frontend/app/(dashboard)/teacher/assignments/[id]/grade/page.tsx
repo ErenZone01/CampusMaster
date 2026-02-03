@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { AssignmentService, SubmissionService, UserService, CourseService } from '@/lib/mock'
-import { useRequireAuth } from '@/hooks/use-auth'
+import { AssignmentApi, AssignmentResponse } from '@/lib/api/services/assignment.api'
+import { SubmissionApi, SubmissionResponse } from '@/lib/api/services/submission.api'
 import { useParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { toast } from 'sonner'
 import {
   CheckCircle,
   Clock,
@@ -20,38 +21,22 @@ import {
   Star,
   MessageSquare,
   Save,
+  Download,
+  Eye,
+  ArrowLeft,
 } from 'lucide-react'
-
-interface Submission {
-  id: string
-  student_id: string
-  student?: { first_name: string; last_name: string }
-  submission_text: string | null
-  submitted_at: string
-  grade: number | null
-  feedback: string | null
-  graded_at: string | null
-}
-
-interface Assignment {
-  id: string
-  title: string
-  description: string
-  course?: { name: string; code: string }
-}
+import Link from 'next/link'
 
 export default function GradeAssignmentPage() {
-  useRequireAuth(['teacher'])
-
   const params = useParams()
-  const assignmentId = params.id as string
-  const [assignment, setAssignment] = useState<Assignment | null>(null)
-  const [submissions, setSubmissions] = useState<Submission[]>([])
+  const assignmentId = parseInt(params.id as string)
+  const [assignment, setAssignment] = useState<AssignmentResponse | null>(null)
+  const [submissions, setSubmissions] = useState<SubmissionResponse[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeStudent, setActiveStudent] = useState<string | null>(null)
-  const [grades, setGrades] = useState<{ [key: string]: number }>({})
-  const [feedbacks, setFeedbacks] = useState<{ [key: string]: string }>({})
-  const [savingId, setSavingId] = useState<string | null>(null)
+  const [activeStudent, setActiveStudent] = useState<number | null>(null)
+  const [grades, setGrades] = useState<{ [key: number]: number }>({})
+  const [feedbacks, setFeedbacks] = useState<{ [key: number]: string }>({})
+  const [savingId, setSavingId] = useState<number | null>(null)
 
   useEffect(() => {
     fetchData()
@@ -60,48 +45,19 @@ export default function GradeAssignmentPage() {
   const fetchData = async () => {
     try {
       // Fetch assignment
-      const assignmentResponse = await AssignmentService.getAssignmentById(assignmentId)
-      if (!assignmentResponse.data) throw new Error('Devoir introuvable')
-
-      const assignmentData = assignmentResponse.data
-      
-      // Fetch course for assignment
-      const courseResponse = await CourseService.getCourseById(assignmentData.course_id)
-      const course = courseResponse.data
-
-      setAssignment({
-        id: assignmentData.id,
-        title: assignmentData.title,
-        description: assignmentData.description || '',
-        course: course ? { name: course.name, code: course.code } : undefined,
-      })
+      const assignmentData = await AssignmentApi.getAssignmentById(assignmentId)
+      setAssignment(assignmentData)
 
       // Fetch submissions
-      const submissionsResponse = await SubmissionService.getSubmissions({ assignment_id: assignmentId })
-      const submissionsData = submissionsResponse.data || []
-
-      // Enrich submissions with student data
-      const enrichedSubmissions = await Promise.all(
-        submissionsData.map(async (sub) => {
-          const userResponse = await UserService.getUserById(sub.student_id)
-          const user = userResponse.data
-          return {
-            ...sub,
-            student: user ? {
-              first_name: user.first_name || '',
-              last_name: user.last_name || '',
-            } : { first_name: 'Inconnu', last_name: '' },
-          }
-        })
-      )
-
-      setSubmissions(enrichedSubmissions)
-      if (enrichedSubmissions.length > 0) {
-        setActiveStudent(enrichedSubmissions[0].id)
+      const submissionsData = await SubmissionApi.getSubmissionsByAssignment(assignmentId)
+      setSubmissions(submissionsData)
+      
+      if (submissionsData.length > 0) {
+        setActiveStudent(submissionsData[0].id)
         // Initialize grades and feedbacks
-        const initialGrades: { [key: string]: number } = {}
-        const initialFeedbacks: { [key: string]: string } = {}
-        enrichedSubmissions.forEach(sub => {
+        const initialGrades: { [key: number]: number } = {}
+        const initialFeedbacks: { [key: number]: string } = {}
+        submissionsData.forEach(sub => {
           initialGrades[sub.id] = sub.grade || 0
           initialFeedbacks[sub.id] = sub.feedback || ''
         })
@@ -110,33 +66,30 @@ export default function GradeAssignmentPage() {
       }
     } catch (error) {
       console.error('Error fetching data:', error)
+      toast.error('Erreur lors du chargement des données')
     } finally {
       setLoading(false)
     }
   }
 
-  const saveGrade = async (submissionId: string) => {
+  const saveGrade = async (submissionId: number) => {
     setSavingId(submissionId)
     try {
-      await SubmissionService.updateSubmission(submissionId, {
-        grade: grades[submissionId] || 0,
-        feedback: feedbacks[submissionId] || '',
-        graded_at: new Date().toISOString(),
-      })
+      const updatedSubmission = await SubmissionApi.gradeSubmission(
+        submissionId,
+        grades[submissionId] || 0,
+        feedbacks[submissionId] || undefined
+      )
 
       // Update local state
       setSubmissions(submissions.map(sub =>
-        sub.id === submissionId
-          ? {
-              ...sub,
-              grade: grades[submissionId] || 0,
-              feedback: feedbacks[submissionId] || '',
-              graded_at: new Date().toISOString(),
-            }
-          : sub
+        sub.id === submissionId ? updatedSubmission : sub
       ))
+      
+      toast.success('Note enregistrée avec succès')
     } catch (error) {
       console.error('Error saving grade:', error)
+      toast.error('Erreur lors de l\'enregistrement de la note')
     } finally {
       setSavingId(null)
     }
@@ -147,14 +100,21 @@ export default function GradeAssignmentPage() {
   }
 
   const activeSubmission = submissions.find(s => s.id === activeStudent)
-  const gradedCount = submissions.filter(s => s.graded_at).length
+  const gradedCount = submissions.filter(s => s.grade !== null).length
 
   return (
     <div className="space-y-6">
+      <Link href="/teacher/assignments">
+        <Button variant="outline" size="sm">
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Retour
+        </Button>
+      </Link>
+
       <div>
         <h1 className="text-3xl font-bold tracking-tight">{assignment.title}</h1>
         <p className="text-muted-foreground mt-2">
-          {assignment.course?.code || 'N/A'} • Correction des devoirs
+          {assignment.courseCode || 'N/A'} • Correction des devoirs
         </p>
       </div>
 
@@ -199,13 +159,18 @@ export default function GradeAssignmentPage() {
                 }`}
               >
                 <div className="font-semibold text-sm">
-                  {submission.student?.first_name || 'Étudiant'} {submission.student?.last_name || 'Inconnu'}
+                  {submission.studentName || 'Étudiant Inconnu'}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
-                  {new Date(submission.submitted_at).toLocaleDateString('fr-FR')}
+                  {new Date(submission.submittedAt).toLocaleDateString('fr-FR')}
+                  {submission.isLate && (
+                    <span className="text-orange-500 ml-2">(En retard)</span>
+                  )}
                 </div>
-                {submission.graded_at ? (
-                  <Badge className="mt-2 bg-green-100 text-green-800">Corrigé</Badge>
+                {submission.grade !== null ? (
+                  <Badge className="mt-2 bg-green-100 text-green-800">
+                    Corrigé • {submission.grade}/20
+                  </Badge>
                 ) : (
                   <Badge className="mt-2 bg-yellow-100 text-yellow-800">À corriger</Badge>
                 )}
@@ -221,14 +186,19 @@ export default function GradeAssignmentPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle>
-                    {activeSubmission.student?.first_name || 'Étudiant'} {activeSubmission.student?.last_name || 'Inconnu'}
+                    {activeSubmission.studentName || 'Étudiant Inconnu'}
                   </CardTitle>
                   <CardDescription>
-                    Soumis le {new Date(activeSubmission.submitted_at).toLocaleDateString('fr-FR')}
+                    Soumis le {new Date(activeSubmission.submittedAt).toLocaleDateString('fr-FR')}
+                    {activeSubmission.isLate && (
+                      <span className="text-orange-500 ml-2">(En retard)</span>
+                    )}
                   </CardDescription>
                 </div>
-                {activeSubmission.graded_at && (
-                  <Badge className="bg-green-100 text-green-800">Corrigé</Badge>
+                {activeSubmission.grade !== null && (
+                  <Badge className="bg-green-100 text-green-800">
+                    Corrigé • {activeSubmission.grade}/20
+                  </Badge>
                 )}
               </div>
             </CardHeader>
@@ -241,11 +211,45 @@ export default function GradeAssignmentPage() {
                 </TabsList>
 
                 <TabsContent value="submission" className="space-y-4">
-                  <div className="bg-muted rounded-lg p-4">
-                    <p className="text-sm whitespace-pre-wrap">
-                      {activeSubmission.submission_text || 'Aucun texte soumis'}
-                    </p>
-                  </div>
+                  {/* File download/view */}
+                  {activeSubmission.filePath ? (
+                    <div className="flex items-center gap-3 p-4 border rounded-lg bg-muted/50">
+                      <FileText className="h-10 w-10 text-primary" />
+                      <div className="flex-1">
+                        <p className="font-medium">Document soumis</p>
+                        <p className="text-sm text-muted-foreground">
+                          {activeSubmission.filePath.split('/').pop()}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" asChild>
+                          <a
+                            href={activeSubmission.filePath.startsWith('http') ? activeSubmission.filePath : `http://localhost:8080${activeSubmission.filePath}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            Voir
+                          </a>
+                        </Button>
+                        <Button variant="outline" size="sm" asChild>
+                          <a
+                            href={activeSubmission.filePath.startsWith('http') ? activeSubmission.filePath : `http://localhost:8080${activeSubmission.filePath}`}
+                            download
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            Télécharger
+                          </a>
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-muted rounded-lg p-4">
+                      <p className="text-sm text-muted-foreground">
+                        Aucun fichier soumis
+                      </p>
+                    </div>
+                  )}
                 </TabsContent>
 
                 <TabsContent value="grade" className="space-y-4">

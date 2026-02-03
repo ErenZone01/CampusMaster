@@ -1,15 +1,13 @@
 package com.campusmaster.campusmaster.domain.model.assigment;
 
+import com.campusmaster.campusmaster.domain.model.user.Student;
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-import java.time.LocalDateTime;
-
-import com.campusmaster.campusmaster.domain.model.user.Student;
 
 @Entity
 @Table(name = "submissions")
@@ -38,7 +36,7 @@ public class Submission {
     @Column(nullable = false)
     private LocalDateTime submittedAt;
 
-    @Column(nullable = false)
+    @Column(nullable = true)
     private Double grade;
 
     @Column(columnDefinition = "TEXT")

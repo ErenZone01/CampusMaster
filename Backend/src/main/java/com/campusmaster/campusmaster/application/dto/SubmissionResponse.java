@@ -1,9 +1,7 @@
 package com.campusmaster.campusmaster.application.dto;
 
-import java.time.LocalDateTime;
-
 import com.campusmaster.campusmaster.domain.model.assigment.Submission;
-
+import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -31,13 +29,16 @@ public class SubmissionResponse {
     public static SubmissionResponse fromEntity(Submission submission) {
         LocalDateTime dueDate = submission.getAssignment().getDueDate();
         boolean isLate = submission.getSubmittedAt().isAfter(dueDate);
-        
+
         return SubmissionResponse.builder()
                 .id(submission.getId())
                 .assignmentId(submission.getAssignment().getId())
                 .assignmentTitle(submission.getAssignment().getTitle())
                 .studentId(submission.getStudent().getId())
-                .studentName(submission.getStudent().getFirstName() + " " + submission.getStudent().getLastName())
+                .studentName(
+                        submission.getStudent().getFirstName()
+                                + " "
+                                + submission.getStudent().getLastName())
                 .studentEmail(submission.getStudent().getEmail())
                 .filePath(submission.getFilePath())
                 .submittedAt(submission.getSubmittedAt())

@@ -18,6 +18,33 @@ export interface SubmissionResponse {
 
 export class SubmissionApi {
   /**
+   * Soumettre un devoir (STUDENT uniquement)
+   */
+  static async submitAssignment(assignmentId: number, file: File): Promise<SubmissionResponse> {
+    const formData = new FormData()
+    formData.append('file', file)
+    return await apiClient.upload<SubmissionResponse>(`/api/assignments/${assignmentId}/submit`, formData)
+  }
+
+  /**
+   * Récupérer ma soumission pour un devoir (STUDENT uniquement)
+   */
+  static async getMySubmissionForAssignment(assignmentId: number): Promise<SubmissionResponse | null> {
+    try {
+      return await apiClient.get<SubmissionResponse>(`/api/assignments/${assignmentId}/my-submission`)
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Récupérer les détails d'une soumission
+   */
+  static async getSubmissionById(id: number): Promise<SubmissionResponse> {
+    return await apiClient.get<SubmissionResponse>(`/api/submissions/${id}`)
+  }
+
+  /**
    * Récupérer toutes les soumissions d'un devoir (TEACHER/ADMIN uniquement)
    */
   static async getSubmissionsByAssignment(assignmentId: number): Promise<SubmissionResponse[]> {
@@ -61,5 +88,30 @@ export class SubmissionApi {
     return await apiClient.post<SubmissionResponse>(
       `/api/submissions/${id}/grade?${params.toString()}`
     )
+  }
+
+  /**
+   * Modifier une soumission (STUDENT uniquement)
+   * Possible seulement si non notée et deadline non dépassée
+   */
+  static async updateSubmission(id: number, file: File): Promise<SubmissionResponse> {
+    const formData = new FormData()
+    formData.append('file', file)
+    return await apiClient.upload<SubmissionResponse>(`/api/submissions/${id}`, formData, 'PUT')
+  }
+
+  /**
+   * Supprimer une soumission (STUDENT uniquement)
+   * Possible seulement si non notée et deadline non dépassée
+   */
+  static async deleteSubmission(id: number): Promise<void> {
+    await apiClient.delete<void>(`/api/submissions/${id}`)
+  }
+
+  /**
+   * Vérifier si une soumission peut être modifiée/supprimée
+   */
+  static async canModifySubmission(id: number): Promise<boolean> {
+    return await apiClient.get<boolean>(`/api/submissions/${id}/can-modify`)
   }
 }
