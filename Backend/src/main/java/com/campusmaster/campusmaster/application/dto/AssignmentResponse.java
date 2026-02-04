@@ -1,33 +1,57 @@
 package com.campusmaster.campusmaster.application.dto;
 
+import com.campusmaster.campusmaster.domain.model.assigment.Assignment;
 import java.time.LocalDateTime;
-
-
-import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Getter;
+import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
-@Getter
-@Setter
+@Data
+@Builder
 @AllArgsConstructor
 @NoArgsConstructor
-@Builder
 public class AssignmentResponse {
-    @NotBlank
     private Long id;
-    @NotBlank
     private String title;
-    @NotBlank
-    private String description;
-    @NotBlank
-    private String instruction;
-    @NotBlank
-    private LocalDateTime deadline;
-    @NotBlank
+    private String instructions;
+    private LocalDateTime dueDate;
     private Long courseId;
-    @NotBlank
-    private boolean published;
+    private String courseCode;
+    private String courseTitle;
+    private Long teacherId;
+    private String teacherName;
+    private String filePath;
+    private Integer submissionCount;
+    private Integer pendingSubmissions;
+    private LocalDateTime createdAt;
+
+    public static AssignmentResponse fromEntity(Assignment assignment) {
+        return AssignmentResponse.builder()
+                .id(assignment.getId())
+                .title(assignment.getTitle())
+                .instructions(assignment.getInstructions())
+                .dueDate(assignment.getDueDate())
+                .courseId(assignment.getCourse().getId())
+                .courseCode(assignment.getCourse().getCode())
+                .courseTitle(assignment.getCourse().getTitle())
+                .teacherId(assignment.getTeacher().getId())
+                .teacherName(
+                        assignment.getTeacher().getFirstName()
+                                + " "
+                                + assignment.getTeacher().getLastName())
+                .filePath(assignment.getFilePath())
+                .submissionCount(
+                        assignment.getSubmissions() != null
+                                ? assignment.getSubmissions().size()
+                                : 0)
+                .pendingSubmissions(
+                        assignment.getSubmissions() != null
+                                ? (int)
+                                        assignment.getSubmissions().stream()
+                                                .filter(s -> s.getGrade() == null)
+                                                .count()
+                                : 0)
+                .build();
+    }
 }

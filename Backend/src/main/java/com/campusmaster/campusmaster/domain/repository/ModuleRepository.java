@@ -1,24 +1,17 @@
 package com.campusmaster.campusmaster.domain.repository;
 
-import java.util.List;
-import java.util.Optional;
-
 import com.campusmaster.campusmaster.domain.model.pedagogy.Module;
 import com.campusmaster.campusmaster.domain.model.pedagogy.Semester;
-import com.campusmaster.campusmaster.domain.model.user.Teacher;
+import java.util.List;
+import java.util.Optional;
 
 public interface ModuleRepository {
     Optional<Module> findById(Long id);
 
     List<Module> findAll();
 
-    List<Module> findByTeachers(Teacher teacher);
-    
-    Module findByIdAndTeachers(Long id,Teacher teacher);
-
-
     Module save(Module module);
-    
+
     boolean existsByCode(String code);
 
     List<Module> findBySemester(Semester semester);
@@ -28,4 +21,4 @@ public interface ModuleRepository {
     Optional<Module> findByCode(String code);
 
     void deleteById(Long id);
-} 
+}

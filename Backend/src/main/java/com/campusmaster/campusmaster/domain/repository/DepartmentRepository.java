@@ -1,12 +1,11 @@
 package com.campusmaster.campusmaster.domain.repository;
 
-import java.util.Optional;
-
 import com.campusmaster.campusmaster.domain.model.pedagogy.Department;
+import java.util.Optional;
+import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface DepartmentRepository {
+public interface DepartmentRepository extends JpaRepository<Department, Long> {
     boolean existsByCode(String code);
-    Department save(Department department);
-    Optional<Department> findById(Long id);
+
     Optional<Department> findByCode(String code);
 }

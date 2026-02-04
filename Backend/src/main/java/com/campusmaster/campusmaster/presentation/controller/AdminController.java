@@ -1,7 +1,18 @@
 package com.campusmaster.campusmaster.presentation.controller;
 
+import com.campusmaster.campusmaster.application.dto.CreateDepartmentRequest;
+import com.campusmaster.campusmaster.application.dto.CreateModuleRequest;
+import com.campusmaster.campusmaster.application.dto.CreateTeacherRequest;
+import com.campusmaster.campusmaster.application.dto.DepartmentResponse;
+import com.campusmaster.campusmaster.application.dto.ModuleResponse;
+import com.campusmaster.campusmaster.application.dto.UserResponse;
+import com.campusmaster.campusmaster.application.service.AdminService;
+import com.campusmaster.campusmaster.application.service.DepartmentService;
+import com.campusmaster.campusmaster.application.service.ModuleService;
+import com.campusmaster.campusmaster.domain.model.pedagogy.Semester;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import java.util.List;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -11,67 +22,49 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import com.campusmaster.campusmaster.application.dto.CreateDepartmentRequest;
-import com.campusmaster.campusmaster.application.dto.CreateModuleRequest;
-import com.campusmaster.campusmaster.application.dto.CreateTeacherRequest;
-import com.campusmaster.campusmaster.application.dto.UserResponse;
-import com.campusmaster.campusmaster.application.dto.ModuleResponse;
-import com.campusmaster.campusmaster.application.dto.DepartmentResponse;
-import com.campusmaster.campusmaster.application.service.AdminService;
-import com.campusmaster.campusmaster.application.service.DepartmentService;
-import com.campusmaster.campusmaster.application.service.ModuleService;
-import com.campusmaster.campusmaster.application.service.TeacherService;
-import com.campusmaster.campusmaster.domain.model.pedagogy.Semester;
-
-import io.swagger.v3.oas.annotations.tags.Tag;
-
-import org.springframework.web.bind.annotation.RequestBody;
-import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/admin")
 @Tag(name = "Admin", description = "Administration académique")
 public class AdminController {
-    
-    @Autowired
-    private AdminService adminService;
 
-    @Autowired
-    private DepartmentService departmentService;
+    @Autowired private AdminService adminService;
 
-    @Autowired
-    private ModuleService moduleService;
+    @Autowired private DepartmentService departmentService;
 
-    @Autowired
-    private TeacherService teacherService;
+    @Autowired private ModuleService moduleService;
 
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/create/teachers")
     public ResponseEntity<UserResponse> createTeacher(
             @Valid @RequestBody CreateTeacherRequest request) {
-        return new ResponseEntity<>(teacherService.createTeacher(request), HttpStatus.CREATED);
+        return new ResponseEntity<>(adminService.createTeacher(request), HttpStatus.CREATED);
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/create/departments")
-    public ResponseEntity<DepartmentResponse> createDepartment(@Valid @RequestBody CreateDepartmentRequest request) {
-        return new ResponseEntity<>(departmentService.createDepartment(request), HttpStatus.CREATED) ;
+    public ResponseEntity<DepartmentResponse> createDepartment(
+            @Valid @RequestBody CreateDepartmentRequest request) {
+        return new ResponseEntity<>(
+                departmentService.createDepartment(request), HttpStatus.CREATED);
     }
 
-     @PreAuthorize("hasRole('ADMIN')")
-     @PostMapping("/create/modules")
-      public ResponseEntity<ModuleResponse> createModule(@Valid @RequestBody CreateModuleRequest request) {
-          return new ResponseEntity<>(moduleService.createModule(request), HttpStatus.CREATED) ;
-     }
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/create/modules")
+    public ResponseEntity<ModuleResponse> createModule(
+            @Valid @RequestBody CreateModuleRequest request) {
+        return new ResponseEntity<>(moduleService.createModule(request), HttpStatus.CREATED);
+    }
 
-     @PreAuthorize("hasRole('ADMIN')")
-     @PutMapping("/modules/update/{moduleId}")
-      public ResponseEntity<ModuleResponse> updateModule(@PathVariable Long moduleId ,@Valid @RequestBody CreateModuleRequest request) {
-          return new ResponseEntity<>(moduleService.updateModule(moduleId, request), HttpStatus.OK);
-     }
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/modules/update/{moduleId}")
+    public ResponseEntity<ModuleResponse> updateModule(
+            @PathVariable Long moduleId, @Valid @RequestBody CreateModuleRequest request) {
+        return new ResponseEntity<>(moduleService.updateModule(moduleId, request), HttpStatus.OK);
+    }
 
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/modules")
@@ -103,12 +96,4 @@ public class AdminController {
         moduleService.deleteModule(id);
         return ResponseEntity.noContent().build();
     }
-
-    @DeleteMapping("account/delete/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Void> deleteAccount(@PathVariable Long id){
-        adminService.deleteAccount(id);
-        return new ResponseEntity<>(HttpStatus.OK);
-    }
-
 }

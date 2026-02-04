@@ -1,13 +1,10 @@
 package com.campusmaster.campusmaster.application.service.impl;
 
-
-import java.util.List;
-
-import org.springframework.stereotype.Service;
-
 import com.campusmaster.campusmaster.application.service.UserService;
 import com.campusmaster.campusmaster.domain.model.user.User;
 import com.campusmaster.campusmaster.domain.repository.UserRepository;
+import java.util.List;
+import org.springframework.stereotype.Service;
 
 @Service
 public class UserServiceImpl implements UserService {
@@ -25,8 +22,9 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public User getUserById(Long id) {
-        return userRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("User not found"));
+        return userRepository
+                .findById(id)
+                .orElseThrow(() -> new RuntimeException("User not found"));
     }
 
     @Override

@@ -1,58 +1,51 @@
 package com.campusmaster.campusmaster.domain.model.assigment;
 
+import com.campusmaster.campusmaster.domain.model.user.Student;
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.time.LocalDateTime;
-
-import com.campusmaster.campusmaster.domain.model.user.Student;
-
 @Entity
-@Table(
-    name = "submissions",
-    uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"assignment_id", "student_id"})
-    }
-)
-@Getter @Setter
-@NoArgsConstructor @AllArgsConstructor
+@Table(name = "submissions")
+@Getter
+@Setter
 @Builder
+@AllArgsConstructor
+@NoArgsConstructor
 public class Submission {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // 📄 Fichier
-    @Column(nullable = false)
-    private String filename;
-
-    @Column(nullable = false)
-    private String filepath;
-
-    @Column(nullable = false)
-    private String filetype;
-
-    // ⏱️ Date de soumission
-    @Column(nullable = false)
-    private LocalDateTime submittedAt;
-
-    // 🎓 Note
-    private Double grade;
-
-    @Column(length = 1000)
-    private String feedback;
-
-    // 🔗 Relations
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ManyToOne(optional = false)
     @JoinColumn(name = "assignment_id")
     private Assignment assignment;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ManyToOne(optional = false)
     @JoinColumn(name = "student_id")
     private Student student;
+
+    @Column(nullable = false)
+    private String filePath;
+
+    @Column(nullable = false)
+    private LocalDateTime submittedAt;
+
+    @Column(nullable = true)
+    private Double grade;
+
+    @Column(columnDefinition = "TEXT")
+    private String feedback;
+
+    @PrePersist
+    protected void onSubmit() {
+        this.submittedAt = LocalDateTime.now();
+    }
+
+    // Getters & Setters
 }

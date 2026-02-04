@@ -1,127 +1,216 @@
 package com.campusmaster.campusmaster.application.service.impl;
 
-import java.util.List;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.access.AccessDeniedException;
-import org.springframework.stereotype.Service;
-
 import com.campusmaster.campusmaster.application.dto.CourseResponse;
 import com.campusmaster.campusmaster.application.dto.CreateCourseRequest;
+import com.campusmaster.campusmaster.application.dto.UpdateCourseRequest;
 import com.campusmaster.campusmaster.application.service.CourseService;
 import com.campusmaster.campusmaster.domain.model.course.Course;
-import com.campusmaster.campusmaster.domain.model.pedagogy.Semester;
-import com.campusmaster.campusmaster.domain.model.user.Student;
+import com.campusmaster.campusmaster.domain.model.course.CourseStatus;
+import com.campusmaster.campusmaster.domain.model.pedagogy.AcademicSemester;
+import com.campusmaster.campusmaster.domain.model.pedagogy.Department;
 import com.campusmaster.campusmaster.domain.model.user.Teacher;
+import com.campusmaster.campusmaster.domain.model.user.User;
+import com.campusmaster.campusmaster.domain.repository.AcademicSemesterRepository;
 import com.campusmaster.campusmaster.domain.repository.CourseRepository;
-import com.campusmaster.campusmaster.domain.repository.ModuleRepository;
-import com.campusmaster.campusmaster.domain.repository.TeacherRepository;
-import com.campusmaster.campusmaster.domain.model.pedagogy.Module;
-
-import lombok.AllArgsConstructor;
-
+import com.campusmaster.campusmaster.domain.repository.DepartmentRepository;
+import com.campusmaster.campusmaster.domain.repository.UserRepository;
+import java.util.List;
+import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Transactional
-@AllArgsConstructor
+@RequiredArgsConstructor
 public class CourseServiceImpl implements CourseService {
 
-    @Autowired
-    private CourseRepository courseRepository;
-    @Autowired
-    private ModuleRepository moduleRepository;
-    @Autowired
-    private TeacherRepository teacherRepository;
-
-    @Override
-    public List<Course> getCoursesBySemester(Semester semester) {
-        throw new UnsupportedOperationException("Unimplemented method 'getCoursesBySemester'");
-    }
-
-    @Override
-    public List<Course> getCoursesByModule(Long moduleId) {
-        return courseRepository.findByModule(moduleRepository.findById(moduleId).get());
-    }
-
-    @Override
-    public List<Course> getCoursesByTeacher(Long teacherId) {
-        return courseRepository.findByTeacher(teacherRepository.findById(teacherId).get());
-    }
+    private final CourseRepository courseRepository;
+    private final DepartmentRepository departmentRepository;
+    private final AcademicSemesterRepository semesterRepository;
+    private final UserRepository userRepository;
 
     @Override
     public CourseResponse createCourse(CreateCourseRequest request) {
-        if (moduleRepository.findById(request.getModuleId()).isEmpty()) {
-            throw new IllegalArgumentException("Module not found with id: " + request.getModuleId());
+        Department department =
+                departmentRepository
+                        .findById(request.getDepartmentId())
+                        .orElseThrow(() -> new IllegalArgumentException("Département non trouvé"));
+
+        AcademicSemester semester =
+                semesterRepository
+                        .findById(request.getSemesterId())
+                        .orElseThrow(() -> new IllegalArgumentException("Semestre non trouvé"));
+
+        Teacher teacher =
+                (Teacher)
+                        userRepository
+                                .findById(request.getTeacherId())
+                                .orElseThrow(
+                                        () ->
+                                                new IllegalArgumentException(
+                                                        "Enseignant non trouvé"));
+
+        if (courseRepository.existsByCode(request.getCode())) {
+            throw new IllegalStateException("Un cours avec ce code existe déjà");
         }
-        if (teacherRepository.findById(request.getTeacherId()).isEmpty()) {
-            throw new IllegalArgumentException("Teacher not found with id: " + request.getTeacherId());
-        }
 
-        Module module = moduleRepository.findById(request.getModuleId()).get();
-        Teacher teacher = teacherRepository.findById(request.getTeacherId()).get();
+        Course course =
+                Course.builder()
+                        .code(request.getCode())
+                        .title(request.getTitle())
+                        .description(request.getDescription())
+                        .credits(request.getCredits())
+                        .maxStudents(request.getMaxStudents())
+                        .coverImage(request.getCoverImage())
+                        .status(
+                                request.getStatus() != null
+                                        ? request.getStatus()
+                                        : CourseStatus.DRAFT)
+                        .department(department)
+                        .semester(semester)
+                        .teacher(teacher)
+                        .build();
 
-        module.getTeachers().add(teacher);
-
-        Course course = Course.builder()
-                .title(request.getTitle())
-                .description(request.getDescription())
-                .module(module)
-                .teacher(teacher)
-                .build();
-        Course saved = courseRepository.save(course);
-        moduleRepository.save(module);
-        return CourseResponse.builder()
-                .id(saved.getId())
-                .title(saved.getTitle())
-                .description(saved.getDescription())
-                .moduleId(saved.getModule() != null ? saved.getModule().getId() : null)
-                .moduleName(saved.getModule() != null ? saved.getModule().getName() : null)
-                .teacherId(saved.getTeacher() != null ? saved.getTeacher().getId() : null)
-                .teacherFirstName(saved.getTeacher() != null ? saved.getTeacher().getFirstName() : null)
-                .teacherLastName(saved.getTeacher() != null ? saved.getTeacher().getLastName() : null)
-                .build();
+        Course savedCourse = courseRepository.save(course);
+        return CourseResponse.fromEntity(savedCourse);
     }
 
     @Override
-    public List<CourseResponse> getCoursesByModule(Student student, Long moduleId) {
-        if (!student.isValidated()) {
-            throw new AccessDeniedException("Profil étudiant non validé");
+    public CourseResponse updateCourse(Long id, UpdateCourseRequest request) {
+        Course course =
+                courseRepository
+                        .findById(id)
+                        .orElseThrow(() -> new IllegalArgumentException("Cours non trouvé"));
+
+        if (request.getCode() != null && !request.getCode().equals(course.getCode())) {
+            if (courseRepository.existsByCode(request.getCode())) {
+                throw new IllegalStateException("Un cours avec ce code existe déjà");
+            }
+            course.setCode(request.getCode());
         }
-        if (moduleRepository.findById(moduleId) == null) {
-            throw new IllegalArgumentException("Module : " + moduleId + " not found");
+
+        if (request.getTitle() != null) {
+            course.setTitle(request.getTitle());
         }
-        Module modules = moduleRepository.findById(moduleId).get();
-        List<Course> courses = courseRepository.findByModule(modules);
-        List<CourseResponse> resp = courses.stream().map(c -> CourseResponse.builder()
-                .id(c.getId())
-                .title(c.getTitle())
-                .description(c.getDescription())
-                .moduleId(c.getModule() != null ? c.getModule().getId() : null)
-                .moduleName(c.getModule() != null ? c.getModule().getName() : null)
-                .teacherId(c.getTeacher() != null ? c.getTeacher().getId() : null)
-                .teacherFirstName(c.getTeacher() != null ? c.getTeacher().getFirstName() : null)
-                .teacherLastName(c.getTeacher() != null ? c.getTeacher().getLastName() : null)
-                .build()).toList();
-        return resp;
+
+        if (request.getDescription() != null) {
+            course.setDescription(request.getDescription());
+        }
+
+        if (request.getCredits() != null) {
+            course.setCredits(request.getCredits());
+        }
+
+        if (request.getMaxStudents() != null) {
+            course.setMaxStudents(request.getMaxStudents());
+        }
+
+        if (request.getCoverImage() != null) {
+            course.setCoverImage(request.getCoverImage());
+        }
+
+        if (request.getStatus() != null) {
+            course.setStatus(request.getStatus());
+        }
+
+        if (request.getDepartmentId() != null) {
+            Department department =
+                    departmentRepository
+                            .findById(request.getDepartmentId())
+                            .orElseThrow(
+                                    () -> new IllegalArgumentException("Département non trouvé"));
+            course.setDepartment(department);
+        }
+
+        if (request.getSemesterId() != null) {
+            AcademicSemester semester =
+                    semesterRepository
+                            .findById(request.getSemesterId())
+                            .orElseThrow(() -> new IllegalArgumentException("Semestre non trouvé"));
+            course.setSemester(semester);
+        }
+
+        if (request.getTeacherId() != null) {
+            Teacher teacher =
+                    (Teacher)
+                            userRepository
+                                    .findById(request.getTeacherId())
+                                    .orElseThrow(
+                                            () ->
+                                                    new IllegalArgumentException(
+                                                            "Enseignant non trouvé"));
+            course.setTeacher(teacher);
+        }
+
+        Course updatedCourse = courseRepository.save(course);
+        return CourseResponse.fromEntity(updatedCourse);
     }
 
     @Override
-    public List<CourseResponse> getCoursesByTeacher(Teacher teacher, Long moduleId) {
-        if(moduleRepository.findById(moduleId) == null){
-            throw new IllegalArgumentException("module doesn't exist");
-        }
-
-        Module module = moduleRepository.findByIdAndTeachers(moduleId, teacher);
-        List<Course> course = courseRepository.findByModule(module);
-        return course.stream().map(e -> CourseResponse.builder()
-                .description(e.getDescription())
-                .moduleId(e.getModule().getId())
-                .moduleName(e.getModule().getName())
-                .teacherFirstName(e.getTeacher().getFirstName())
-                .teacherLastName(e.getTeacher().getLastName())
-                .id(e.getId())
-                .build()).toList();
+    public CourseResponse getCourseById(Long id) {
+        Course course =
+                courseRepository
+                        .findById(id)
+                        .orElseThrow(() -> new IllegalArgumentException("Cours non trouvé"));
+        return CourseResponse.fromEntity(course);
     }
 
+    @Override
+    public Page<CourseResponse> getAllCourses(
+            Long teacherId,
+            Long departmentId,
+            Long semesterId,
+            CourseStatus status,
+            Pageable pageable) {
+        Page<Course> courses =
+                courseRepository.findByFilters(
+                        teacherId, departmentId, semesterId, status, pageable);
+        return courses.map(CourseResponse::fromEntity);
+    }
+
+    @Override
+    public List<CourseResponse> getCoursesByTeacher(Long teacherId) {
+        Teacher teacher =
+                (Teacher)
+                        userRepository
+                                .findById(teacherId)
+                                .orElseThrow(
+                                        () ->
+                                                new IllegalArgumentException(
+                                                        "Enseignant non trouvé"));
+        List<Course> courses = courseRepository.findByTeacher(teacher);
+        return courses.stream().map(CourseResponse::fromEntity).collect(Collectors.toList());
+    }
+
+    @Override
+    public List<CourseResponse> getMyCourses() {
+        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+
+        if (!(principal instanceof User)) {
+            throw new IllegalStateException("Utilisateur non authentifié");
+        }
+
+        User user = (User) principal;
+
+        if (!(user instanceof Teacher)) {
+            throw new IllegalStateException("L'utilisateur n'est pas un enseignant");
+        }
+
+        Teacher teacher = (Teacher) user;
+        List<Course> courses = courseRepository.findByTeacher(teacher);
+        return courses.stream().map(CourseResponse::fromEntity).collect(Collectors.toList());
+    }
+
+    @Override
+    public void deleteCourse(Long id) {
+        Course course =
+                courseRepository
+                        .findById(id)
+                        .orElseThrow(() -> new IllegalArgumentException("Cours non trouvé"));
+        courseRepository.delete(course);
+    }
 }

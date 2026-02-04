@@ -15,24 +15,13 @@ import lombok.Setter;
 @NoArgsConstructor
 @Builder
 public class CreateTeacherRequest {
-    @NotBlank
-    @NotNull
-    private String firstName;
-    
-    @NotBlank
-    @NotNull
-    private String lastName;
+    @NotBlank @NotNull private String firstName;
 
-    @Email
-    @NotBlank
-    @NotNull
-    private String email;
+    @NotBlank @NotNull private String lastName;
 
-    @NotBlank
-    @NotNull
-    private String password;
+    @Email @NotBlank @NotNull private String email;
 
-    @NotBlank
-    @NotNull
-    private String department;
+    @NotBlank @NotNull private String password;
+
+    @NotBlank @NotNull private String department;
 }

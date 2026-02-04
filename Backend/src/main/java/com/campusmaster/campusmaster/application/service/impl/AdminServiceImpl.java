@@ -1,23 +1,71 @@
 package com.campusmaster.campusmaster.application.service.impl;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
+import com.campusmaster.campusmaster.application.dto.CreateTeacherRequest;
+import com.campusmaster.campusmaster.application.dto.UserResponse;
 import com.campusmaster.campusmaster.application.service.AdminService;
+import com.campusmaster.campusmaster.domain.model.pedagogy.Department;
+import com.campusmaster.campusmaster.domain.model.pedagogy.Module;
+import com.campusmaster.campusmaster.domain.model.user.Role;
+import com.campusmaster.campusmaster.domain.model.user.Teacher;
+import com.campusmaster.campusmaster.domain.repository.DepartmentRepository;
+import com.campusmaster.campusmaster.domain.repository.ModuleRepository;
+import com.campusmaster.campusmaster.domain.repository.TeacherRepository;
 import com.campusmaster.campusmaster.domain.repository.UserRepository;
+import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
 
 @Service
 public class AdminServiceImpl implements AdminService {
 
-    @Autowired
-    private UserRepository userRepository;
-    
+    @Autowired private TeacherRepository teacherRepository;
+    @Autowired private UserRepository userRepository;
+    @Autowired private PasswordEncoder passwordEncoder;
+    @Autowired private ModuleRepository moduleRepository;
+    @Autowired private DepartmentRepository departmentRepository;
+
     @Override
-    public void deleteAccount(Long id){
-        if (!userRepository.existsById(id)){
-            throw new IllegalArgumentException("Id: " + id + " doesn't exist");
+    public UserResponse createTeacher(CreateTeacherRequest request) {
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new RuntimeException("Email already used");
         }
+
+        if (!departmentRepository.existsByCode(request.getDepartment())) {
+            throw new RuntimeException("Department not found");
+        }
+
+        Teacher teacher = new Teacher();
+        teacher.setFirstName(request.getFirstName());
+        teacher.setLastName(request.getLastName());
+        teacher.setEmail(request.getEmail());
+        teacher.setPassword(passwordEncoder.encode(request.getPassword()));
+        teacher.setRole(Role.TEACHER);
+        teacher.setEnabled(true);
+        teacher.setDepartment(request.getDepartment());
+
+        Teacher teacher_save = teacherRepository.save(teacher);
+
+        Department department = departmentRepository.findByCode(request.getDepartment()).get();
+        if (moduleRepository.findByDepartmentId(department.getId()) != null) {
+            List<Module> module = moduleRepository.findByDepartmentId(department.getId());
+            module.forEach(
+                    (e) -> {
+                        e.getTeachers().add(teacher_save);
+                        moduleRepository.save(e);
+                    });
+        }
+
+        return UserResponse.builder()
+                .email(teacher.getEmail())
+                .firstName(teacher.getFirstName())
+                .lastName(teacher.getLastName())
+                .role(teacher.getRole())
+                .build();
+    }
+
+    @Override
+    public void deleteAccount(Long id) {
         userRepository.deleteById(id);
     }
-    
 }

@@ -2,7 +2,6 @@ package com.campusmaster.campusmaster.application.service.impl;
 
 import java.security.SecureRandom;
 import java.time.Year;
-
 import org.springframework.stereotype.Service;
 
 @Service
@@ -13,7 +12,7 @@ public final class INEGenerator {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final int RANDOM_LEN = 8;
 
-    private INEGenerator() { }
+    private INEGenerator() {}
 
     public static String generate() {
         StringBuilder sb = new StringBuilder(PREFIX.length() + RANDOM_LEN + 4);
