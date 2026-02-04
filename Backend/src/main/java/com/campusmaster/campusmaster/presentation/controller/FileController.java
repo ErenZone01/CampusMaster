@@ -1,11 +1,8 @@
 package com.campusmaster.campusmaster.presentation.controller;
 
-import com.campusmaster.campusmaster.application.service.FileStorageService;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.HashMap;
 import java.util.Map;
-import lombok.RequiredArgsConstructor;
+
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -18,6 +15,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.campusmaster.campusmaster.application.service.FileStorageService;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
+
 @RestController
 @RequestMapping("/api/files")
 @Tag(name = "Files", description = "Accès aux fichiers")
@@ -27,14 +31,27 @@ public class FileController {
     private final FileStorageService fileStorageService;
 
     @PostMapping("/upload/{folder}")
-    @Operation(
-            summary = "Upload un fichier",
-            description = "Uploader un fichier dans un dossier spécifique")
+    @Operation(summary = "Upload un fichier", description = "Uploader un fichier dans un dossier spécifique")
     public ResponseEntity<Map<String, String>> uploadFile(
-            @PathVariable String folder, @RequestParam("file") MultipartFile file) {
+            @PathVariable String folder, @RequestParam("file") MultipartFile file,
+            HttpServletRequest request) {
 
         String filename = fileStorageService.storeFile(file, folder);
-        String url = "http://localhost:8080/api/files/" + filename;
+
+        // Construire l'URL dynamiquement selon l'hôte
+        String scheme = request.getScheme();
+        String serverName = request.getServerName();
+        int port = request.getServerPort();
+
+        String baseUrl = scheme + "://" + serverName;
+
+        // N'ajouter le port que s'il n'est pas le port par défaut
+        if ((scheme.equals("http") && port != 80) ||
+                (scheme.equals("https") && port != 443)) {
+            baseUrl += ":" + port;
+        }
+
+        String url = baseUrl + "/api/files/" + filename;
 
         Map<String, String> response = new HashMap<>();
         response.put("url", url);
@@ -80,8 +97,7 @@ public class FileController {
         } else if (lowerFilename.endsWith(".xls") || lowerFilename.endsWith(".xlsx")) {
             contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
         } else if (lowerFilename.endsWith(".ppt") || lowerFilename.endsWith(".pptx")) {
-            contentType =
-                    "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+            contentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
         } else if (lowerFilename.endsWith(".txt")) {
             contentType = "text/plain";
         }
