@@ -88,3 +88,13 @@ CampusMaster/
     ├── Dockerfile
     └── app/
 ```
+
+---
+
+## 🚀 Déploiement
+
+- **Frontend (Production):** https://campus-master-eosin.vercel.app
+- **Backend API (Production):** https://campusmaster-3u0z.onrender.com
+- **Environnement:** production (déployé publiquement)
+- **Endpoints utiles:** Swagger UI — https://campusmaster-3u0z.onrender.com/swagger-ui.html
+- **Accès:** public — pas d'identifiants requis pour l'interface publique 
